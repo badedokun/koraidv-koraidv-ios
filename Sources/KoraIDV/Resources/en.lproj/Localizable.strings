@@ -1,0 +1,95 @@
+/* Kora IDV - English Localization */
+
+/* General */
+"koraidv.general.cancel" = "Cancel";
+"koraidv.general.continue" = "Continue";
+"koraidv.general.tryAgain" = "Try Again";
+"koraidv.general.done" = "Done";
+"koraidv.general.loading" = "Loading...";
+
+/* Consent Screen */
+"koraidv.consent.title" = "Verify Your Identity";
+"koraidv.consent.subtitle" = "We need to verify your identity to continue.";
+"koraidv.consent.whatToExpect" = "What to expect";
+"koraidv.consent.step.document" = "Take a photo of your ID document";
+"koraidv.consent.step.selfie" = "Take a selfie for face matching";
+"koraidv.consent.step.liveness" = "Complete a quick liveness check";
+"koraidv.consent.requirements" = "Requirements";
+"koraidv.consent.requirement.document" = "A valid government-issued ID";
+"koraidv.consent.requirement.camera" = "Camera access on your device";
+"koraidv.consent.requirement.lighting" = "Good lighting conditions";
+"koraidv.consent.startButton" = "Start Verification";
+
+/* Document Selection */
+"koraidv.documentSelection.title" = "Select Document Type";
+"koraidv.documentSelection.subtitle" = "Choose the document you would like to use for verification.";
+"koraidv.documentSelection.category.recommended" = "Recommended";
+"koraidv.documentSelection.category.other" = "Other Documents";
+
+/* Document Types */
+"koraidv.document.usPassport" = "US Passport";
+"koraidv.document.usDriversLicense" = "US Driver's License";
+"koraidv.document.usStateId" = "US State ID";
+"koraidv.document.internationalPassport" = "International Passport";
+"koraidv.document.ukPassport" = "UK Passport";
+"koraidv.document.euIdCard" = "EU ID Card";
+"koraidv.document.ghanaCard" = "Ghana Card";
+"koraidv.document.ngNin" = "Nigeria NIN";
+"koraidv.document.keId" = "Kenya ID";
+"koraidv.document.zaId" = "South Africa ID";
+
+/* Document Capture */
+"koraidv.documentCapture.title.front" = "Document Front";
+"koraidv.documentCapture.title.back" = "Document Back";
+"koraidv.documentCapture.instruction" = "Position document within the frame";
+"koraidv.documentCapture.holdSteady" = "Hold steady...";
+"koraidv.documentCapture.capturing" = "Capturing...";
+"koraidv.documentCapture.moveCloser" = "Move closer";
+"koraidv.documentCapture.tooDark" = "Too dark";
+"koraidv.documentCapture.tooBright" = "Too bright";
+"koraidv.documentCapture.reduceGlare" = "Reduce glare";
+"koraidv.documentCapture.positionInFrame" = "Position document in frame";
+
+/* Selfie Capture */
+"koraidv.selfieCapture.title" = "Take a Selfie";
+"koraidv.selfieCapture.instruction" = "Position your face in the oval";
+"koraidv.selfieCapture.faceNotVisible" = "Face not visible";
+"koraidv.selfieCapture.moveCloser" = "Move closer";
+"koraidv.selfieCapture.centerFace" = "Center your face";
+"koraidv.selfieCapture.holdStill" = "Hold still...";
+
+/* Liveness Check */
+"koraidv.liveness.title" = "Liveness Check";
+"koraidv.liveness.starting" = "Starting liveness check...";
+"koraidv.liveness.challengeProgress" = "Challenge %d of %d";
+"koraidv.liveness.challenge.blink" = "Blink your eyes";
+"koraidv.liveness.challenge.smile" = "Smile";
+"koraidv.liveness.challenge.turnLeft" = "Turn your head left";
+"koraidv.liveness.challenge.turnRight" = "Turn your head right";
+"koraidv.liveness.challenge.nodUp" = "Look up";
+"koraidv.liveness.challenge.nodDown" = "Look down";
+
+/* Results */
+"koraidv.result.success.title" = "Verification Successful";
+"koraidv.result.success.subtitle" = "Your identity has been successfully verified.";
+"koraidv.result.failed.title" = "Verification Failed";
+"koraidv.result.failed.subtitle" = "We couldn't verify your identity. Please try again or contact support.";
+"koraidv.result.review.title" = "Review Required";
+"koraidv.result.review.subtitle" = "Your verification requires manual review. We'll notify you of the result.";
+"koraidv.result.processing.title" = "Processing";
+"koraidv.result.processing.subtitle" = "Your verification is being processed.";
+"koraidv.result.verifiedInfo" = "Verified Information";
+"koraidv.result.name" = "Name";
+"koraidv.result.dateOfBirth" = "Date of Birth";
+"koraidv.result.document" = "Document";
+
+/* Errors */
+"koraidv.error.title" = "Something went wrong";
+"koraidv.error.cameraPermission" = "Camera access is required for verification.";
+"koraidv.error.network" = "Network error. Please check your connection and try again.";
+"koraidv.error.timeout" = "The request timed out. Please try again.";
+"koraidv.error.sessionExpired" = "Your session has expired. Please start again.";
+"koraidv.error.documentNotSupported" = "This document type is not supported.";
+"koraidv.error.faceNotMatched" = "The selfie doesn't match the document photo.";
+"koraidv.error.livenessCheckFailed" = "Liveness check failed. Please try again.";
+"koraidv.error.qualityTooLow" = "Image quality is too low. Please try again with better lighting.";
