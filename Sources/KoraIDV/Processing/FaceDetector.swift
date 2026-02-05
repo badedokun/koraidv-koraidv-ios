@@ -167,9 +167,9 @@ final class FaceDetector {
             boundingBox: boundingBox,
             confidence: observation.confidence,
             landmarks: landmarks,
-            yaw: observation.yaw?.doubleValue.map { CGFloat($0) },
-            pitch: observation.pitch?.doubleValue.map { CGFloat($0) },
-            roll: observation.roll?.doubleValue.map { CGFloat($0) }
+            yaw: observation.yaw.map { CGFloat($0.doubleValue) },
+            pitch: observation.pitch.map { CGFloat($0.doubleValue) },
+            roll: observation.roll.map { CGFloat($0.doubleValue) }
         )
     }
 

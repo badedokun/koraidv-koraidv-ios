@@ -32,7 +32,7 @@ final class DocumentScanner {
 
     /// Detect document in image
     func detectDocument(in pixelBuffer: CVPixelBuffer, completion: @escaping (DocumentDetectionResult?) -> Void) {
-        let request = VNDetectDocumentSegmentationRequest { [weak self] request, error in
+        let request = createDocumentDetectionRequest { [weak self] request, error in
             guard let self = self else { return }
 
             if let error = error {
@@ -91,6 +91,20 @@ final class DocumentScanner {
         }
     }
 
+    /// Creates document detection request with iOS version compatibility
+    private func createDocumentDetectionRequest(completionHandler: @escaping VNRequestCompletionHandler) -> VNImageBasedRequest {
+        if #available(iOS 15.0, *) {
+            return VNDetectDocumentSegmentationRequest(completionHandler: completionHandler)
+        } else {
+            let request = VNDetectRectanglesRequest(completionHandler: completionHandler)
+            request.minimumAspectRatio = VNAspectRatio(minimumAspectRatio)
+            request.maximumAspectRatio = VNAspectRatio(maximumAspectRatio)
+            request.minimumConfidence = minimumConfidence
+            request.maximumObservations = 1
+            return request
+        }
+    }
+
     /// Detect document in UIImage
     func detectDocument(in image: UIImage, completion: @escaping (DocumentDetectionResult?) -> Void) {
         guard let cgImage = image.cgImage else {
@@ -98,7 +112,7 @@ final class DocumentScanner {
             return
         }
 
-        let request = VNDetectDocumentSegmentationRequest { [weak self] request, error in
+        let request = createDocumentDetectionRequest { [weak self] request, error in
             guard let self = self else { return }
 
             if let error = error {

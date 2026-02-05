@@ -206,7 +206,7 @@ struct DocumentCaptureView: View {
             VStack(spacing: 16) {
                 ProgressView()
                     .scaleEffect(1.5)
-                    .tint(.white)
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
 
                 Text("Processing...")
                     .font(theme.bodyFont)
