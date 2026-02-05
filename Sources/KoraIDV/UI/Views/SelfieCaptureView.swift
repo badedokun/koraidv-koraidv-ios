@@ -50,7 +50,9 @@ struct SelfieCaptureView: View {
 
     private var headerView: some View {
         HStack {
-            Button(action: onCancel) {
+            Button {
+                onCancel()
+            } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 20, weight: .medium))
                     .foregroundColor(.white)
@@ -150,9 +152,9 @@ struct SelfieCaptureView: View {
     }
 
     private var captureButtonView: some View {
-        Button(action: {
+        Button {
             viewModel.captureManually()
-        }) {
+        } label: {
             ZStack {
                 Circle()
                     .stroke(Color.white, lineWidth: 4)

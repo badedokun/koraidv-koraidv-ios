@@ -93,7 +93,7 @@ public final class SessionManager {
         apiClient.uploadImage(
             endpoint: .uploadSelfie(id: verificationId),
             imageData: imageData,
-            metadata: nil,
+            metadata: nil as EmptyBody?,
             completion: completion
         )
     }

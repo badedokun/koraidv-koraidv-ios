@@ -91,9 +91,11 @@ struct ConsentView: View {
 
     private var footerSection: some View {
         VStack(spacing: 12) {
-            Button(action: onAccept) {
+            Button {
+                onAccept()
+            } label: {
                 Text("Accept & Continue")
-                    .font(theme.bodyFont.weight(.semibold))
+                    .font(theme.bodyFont.weight(Font.Weight.semibold))
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .padding()
@@ -101,7 +103,9 @@ struct ConsentView: View {
                     .cornerRadius(theme.cornerRadius)
             }
 
-            Button(action: onDecline) {
+            Button {
+                onDecline()
+            } label: {
                 Text("Decline")
                     .font(theme.bodyFont)
                     .foregroundColor(theme.secondaryTextColor)

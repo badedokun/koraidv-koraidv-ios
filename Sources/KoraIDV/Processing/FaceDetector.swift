@@ -163,12 +163,18 @@ final class FaceDetector {
             )
         }
 
+        // pitch is only available on iOS 15.0+
+        var pitchValue: CGFloat? = nil
+        if #available(iOS 15.0, *) {
+            pitchValue = observation.pitch.map { CGFloat($0.doubleValue) }
+        }
+
         return DetectedFace(
             boundingBox: boundingBox,
             confidence: observation.confidence,
             landmarks: landmarks,
             yaw: observation.yaw.map { CGFloat($0.doubleValue) },
-            pitch: observation.pitch.map { CGFloat($0.doubleValue) },
+            pitch: pitchValue,
             roll: observation.roll.map { CGFloat($0.doubleValue) }
         )
     }

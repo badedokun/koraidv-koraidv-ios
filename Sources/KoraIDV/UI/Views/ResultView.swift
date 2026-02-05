@@ -37,9 +37,11 @@ struct ResultView: View {
             Spacer()
 
             // Done button
-            Button(action: onDone) {
+            Button {
+                onDone()
+            } label: {
                 Text("Done")
-                    .font(theme.bodyFont.weight(.semibold))
+                    .font(theme.bodyFont.weight(Font.Weight.semibold))
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .padding()
@@ -240,9 +242,11 @@ struct ErrorView: View {
 
             // Buttons
             VStack(spacing: 12) {
-                Button(action: onRetry) {
+                Button {
+                    onRetry()
+                } label: {
                     Text("Try Again")
-                        .font(theme.bodyFont.weight(.semibold))
+                        .font(theme.bodyFont.weight(Font.Weight.semibold))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding()
@@ -250,7 +254,9 @@ struct ErrorView: View {
                         .cornerRadius(theme.cornerRadius)
                 }
 
-                Button(action: onCancel) {
+                Button {
+                    onCancel()
+                } label: {
                     Text("Cancel")
                         .font(theme.bodyFont)
                         .foregroundColor(theme.secondaryTextColor)

@@ -56,7 +56,7 @@ final class VerificationFlowController {
 
         let hostingController = UIHostingController(rootView: consentView)
         let navController = UINavigationController(rootViewController: hostingController)
-        navController.modalPresentationStyle = .fullScreen
+        navController.modalPresentationStyle = UIModalPresentationStyle.fullScreen
         navController.setNavigationBarHidden(true, animated: false)
 
         navigationController = navController
@@ -73,7 +73,7 @@ final class VerificationFlowController {
         let resumeView = buildViewForStep(currentStep)
         let hostingController = UIHostingController(rootView: AnyView(resumeView))
         let navController = UINavigationController(rootViewController: hostingController)
-        navController.modalPresentationStyle = .fullScreen
+        navController.modalPresentationStyle = UIModalPresentationStyle.fullScreen
         navController.setNavigationBarHidden(true, animated: false)
 
         navigationController = navController
@@ -87,7 +87,7 @@ final class VerificationFlowController {
 
         let selectionView = DocumentSelectionView(
             allowedTypes: configuration.documentTypes,
-            onSelect: { [weak self] documentType in
+            onSelect: { [weak self] (documentType: DocumentType) in
                 self?.selectedDocumentType = documentType
                 self?.proceedToDocumentCapture()
             },
@@ -325,8 +325,8 @@ final class VerificationFlowController {
         // Loading overlay implementation
         let loadingView = LoadingView(message: message)
         let hostingController = UIHostingController(rootView: loadingView)
-        hostingController.modalPresentationStyle = .overFullScreen
-        hostingController.view.backgroundColor = .clear
+        hostingController.modalPresentationStyle = UIModalPresentationStyle.overFullScreen
+        hostingController.view.backgroundColor = UIColor.clear
         navigationController?.present(hostingController, animated: false)
     }
 

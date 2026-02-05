@@ -45,13 +45,13 @@ struct DocumentSelectionView: View {
 
     private var footerView: some View {
         VStack(spacing: 12) {
-            Button(action: {
+            Button {
                 if let type = selectedType {
                     onSelect(type)
                 }
-            }) {
+            } label: {
                 Text("Continue")
-                    .font(theme.bodyFont.weight(.semibold))
+                    .font(theme.bodyFont.weight(Font.Weight.semibold))
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .padding()
@@ -60,7 +60,9 @@ struct DocumentSelectionView: View {
             }
             .disabled(selectedType == nil)
 
-            Button(action: onCancel) {
+            Button {
+                onCancel()
+            } label: {
                 Text("Cancel")
                     .font(theme.bodyFont)
                     .foregroundColor(theme.secondaryTextColor)
@@ -72,7 +74,7 @@ struct DocumentSelectionView: View {
     private func documentSection(category: String, types: [DocumentType]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(category)
-                .font(theme.captionFont.weight(.semibold))
+                .font(theme.captionFont.weight(Font.Weight.semibold))
                 .foregroundColor(theme.secondaryTextColor)
                 .textCase(.uppercase)
 
@@ -83,9 +85,9 @@ struct DocumentSelectionView: View {
     }
 
     private func documentRow(type: DocumentType) -> some View {
-        Button(action: {
+        Button {
             selectedType = type
-        }) {
+        } label: {
             HStack(spacing: 16) {
                 Image(systemName: documentIcon(for: type))
                     .font(.system(size: 24))
