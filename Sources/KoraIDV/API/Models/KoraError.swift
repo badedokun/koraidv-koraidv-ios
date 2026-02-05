@@ -267,4 +267,25 @@ public enum KoraError: LocalizedError {
         case .userCancelled: return "USER_CANCELLED"
         }
     }
+
+    /// Compatibility property for code access
+    public var code: ErrorCode {
+        return ErrorCode(rawValue: errorCode)
+    }
+
+    /// Compatibility property for message access
+    public var message: String {
+        return errorDescription ?? "Unknown error"
+    }
+}
+
+// MARK: - Error Code Wrapper
+
+/// Wrapper for error code to provide rawValue access
+public struct ErrorCode: RawRepresentable {
+    public let rawValue: String
+
+    public init(rawValue: String) {
+        self.rawValue = rawValue
+    }
 }
