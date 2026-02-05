@@ -45,7 +45,7 @@ import KoraIDV
 
 // In your AppDelegate or early in app lifecycle
 let config = KoraIDV.Configuration(
-    apiKey: "ck_live_your_api_key",
+    apiKey: "kora_your_api_key_here",
     tenantId: "your-tenant-uuid",
     environment: .production
 )
