@@ -15,7 +15,7 @@ public struct Configuration {
     // MARK: - Optional Properties
 
     /// API environment
-    public var environment: Environment
+    public var environment: APIEnvironment
 
     /// Allowed document types for verification
     public var documentTypes: [DocumentType]
@@ -45,7 +45,7 @@ public struct Configuration {
     public init(
         apiKey: String,
         tenantId: String,
-        environment: Environment? = nil
+        environment: APIEnvironment? = nil
     ) {
         self.apiKey = apiKey
         self.tenantId = tenantId
@@ -72,7 +72,7 @@ public struct Configuration {
 // MARK: - Environment
 
 /// API Environment
-public enum Environment {
+public enum APIEnvironment {
     case production
     case sandbox
 
