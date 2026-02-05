@@ -19,5 +19,5 @@ Pod::Spec.new do |s|
   s.source_files = 'Sources/KoraIDV/**/*.swift'
   s.resources = 'Sources/KoraIDV/UI/Localization/*.lproj'
 
-  s.frameworks = 'UIKit', 'AVFoundation', 'Vision', 'CoreImage', 'Accelerate'
+  s.frameworks = 'UIKit', 'SwiftUI', 'AVFoundation', 'Vision', 'CoreImage', 'Accelerate'
 end
