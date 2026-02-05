@@ -79,9 +79,9 @@ public enum APIEnvironment {
     var baseURL: URL {
         switch self {
         case .production:
-            return URL(string: "https://api.koraidv.com/api/v1")!
+            return URL(string: "https://koraidv-identity-kendyplisq-uc.a.run.app/api/v1")!
         case .sandbox:
-            return URL(string: "https://sandbox-api.koraidv.com/api/v1")!
+            return URL(string: "https://koraidv-identity-kendyplisq-uc.a.run.app/api/v1")!
         }
     }
 }
