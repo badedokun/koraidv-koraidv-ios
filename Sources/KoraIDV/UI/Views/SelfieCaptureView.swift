@@ -181,7 +181,7 @@ struct SelfieCaptureView: View {
             VStack(spacing: 16) {
                 ProgressView()
                     .scaleEffect(1.5)
-                    .tint(.white)
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
 
                 Text("Processing...")
                     .font(theme.bodyFont)
@@ -268,10 +268,3 @@ extension SelfieCaptureViewModel: SelfieCaptureDelegate {
     }
 }
 
-// MARK: - Internal access for camera manager
-extension SelfieCapture {
-    var cameraManager: CameraManager {
-        // This is a workaround - in production, would use proper property access
-        return CameraManager()
-    }
-}

@@ -349,13 +349,13 @@ final class VerificationFlowController {
         pushView(errorView)
     }
 
-    private func showQualityError(issues: [QualityIssue], side: DocumentSide) {
+    private func showQualityError(issues: [APIQualityIssue], side: DocumentSide) {
         let messages = issues.map { $0.message }
         let error = KoraError.qualityValidationFailed(messages)
         showError(error)
     }
 
-    private func showSelfieQualityError(issues: [QualityIssue]) {
+    private func showSelfieQualityError(issues: [APIQualityIssue]) {
         let messages = issues.map { $0.message }
         let error = KoraError.qualityValidationFailed(messages)
         showError(error)

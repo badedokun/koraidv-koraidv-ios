@@ -110,12 +110,12 @@ struct DocumentUploadResponse: Decodable {
     let success: Bool
     let documentId: String?
     let qualityScore: Double?
-    let qualityIssues: [QualityIssue]?
+    let qualityIssues: [APIQualityIssue]?
     let extractedData: DocumentVerification?
 }
 
-/// Quality issue
-struct QualityIssue: Decodable {
+/// API Quality issue (from server responses)
+struct APIQualityIssue: Decodable {
     let type: String
     let message: String
     let severity: String
@@ -127,7 +127,7 @@ struct SelfieUploadResponse: Decodable {
     let selfieId: String?
     let faceDetected: Bool
     let qualityScore: Double?
-    let qualityIssues: [QualityIssue]?
+    let qualityIssues: [APIQualityIssue]?
 }
 
 /// Document upload metadata

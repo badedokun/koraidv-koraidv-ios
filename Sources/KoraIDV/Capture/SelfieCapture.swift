@@ -16,7 +16,8 @@ final class SelfieCapture: NSObject {
 
     weak var delegate: SelfieCaptureDelegate?
 
-    private let cameraManager = CameraManager()
+    /// Camera manager - exposed for preview layer access
+    let cameraManager = CameraManager()
     private let faceDetector = FaceDetector()
     private let qualityValidator = QualityValidator()
 
