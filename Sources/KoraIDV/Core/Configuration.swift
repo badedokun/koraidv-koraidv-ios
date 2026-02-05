@@ -15,7 +15,15 @@ public struct Configuration {
     // MARK: - Optional Properties
 
     /// API environment
-    public var environment: Environment
+    public var environment: APIEnvironment
+
+    /// Custom base URL override (e.g., for self-hosted or Cloud Run deployments)
+    public var baseURL: URL?
+
+    /// Resolved base URL: uses custom `baseURL` if provided, otherwise falls back to `environment` default.
+    public var resolvedBaseURL: URL {
+        baseURL ?? environment.baseURL
+    }
 
     /// Allowed document types for verification
     public var documentTypes: [DocumentType]
@@ -39,21 +47,24 @@ public struct Configuration {
 
     /// Initialize SDK configuration
     /// - Parameters:
-    ///   - apiKey: Your API key (starts with ck_live_ or ck_sandbox_)
+    ///   - apiKey: Your API key (starts with ck_live_, ck_sandbox_, kora_live_, or kora_sandbox_)
     ///   - tenantId: Your tenant ID (UUID)
     ///   - environment: API environment (auto-detected from API key if not specified)
+    ///   - baseURL: Custom base URL override (optional, overrides environment URL if provided)
     public init(
         apiKey: String,
         tenantId: String,
-        environment: Environment? = nil
+        environment: APIEnvironment? = nil,
+        baseURL: URL? = nil
     ) {
         self.apiKey = apiKey
         self.tenantId = tenantId
+        self.baseURL = baseURL
 
         // Auto-detect environment from API key prefix
         if let env = environment {
             self.environment = env
-        } else if apiKey.hasPrefix("ck_sandbox_") {
+        } else if apiKey.hasPrefix("ck_sandbox_") || apiKey.hasPrefix("kora_sandbox_") {
             self.environment = .sandbox
         } else {
             self.environment = .production
@@ -72,7 +83,7 @@ public struct Configuration {
 // MARK: - Environment
 
 /// API Environment
-public enum Environment {
+public enum APIEnvironment {
     case production
     case sandbox
 

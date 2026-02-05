@@ -160,7 +160,7 @@ final class APIClient {
     // MARK: - Private Methods
 
     private func buildRequest(endpoint: APIEndpoint, method: HTTPMethod) throws -> URLRequest {
-        let url = configuration.environment.baseURL.appendingPathComponent(endpoint.path)
+        let url = configuration.resolvedBaseURL.appendingPathComponent(endpoint.path)
 
         var request = URLRequest(url: url)
         request.httpMethod = method.rawValue

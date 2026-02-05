@@ -53,7 +53,9 @@ struct DocumentCaptureView: View {
 
     private var headerView: some View {
         HStack {
-            Button(action: onCancel) {
+            Button {
+                onCancel()
+            } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 20, weight: .medium))
                     .foregroundColor(.white)
@@ -151,7 +153,9 @@ struct DocumentCaptureView: View {
     private var captureButtonView: some View {
         HStack(spacing: 40) {
             // Manual capture toggle
-            Button(action: { showManualCapture.toggle() }) {
+            Button {
+                showManualCapture.toggle()
+            } label: {
                 VStack(spacing: 4) {
                     Image(systemName: showManualCapture ? "a.circle.fill" : "a.circle")
                         .font(.system(size: 24))
@@ -162,9 +166,9 @@ struct DocumentCaptureView: View {
             }
 
             // Capture button
-            Button(action: {
+            Button {
                 viewModel.captureManually()
-            }) {
+            } label: {
                 ZStack {
                     Circle()
                         .stroke(Color.white, lineWidth: 4)
@@ -178,7 +182,9 @@ struct DocumentCaptureView: View {
             .disabled(!showManualCapture && !viewModel.isDocumentDetected)
 
             // Flash toggle
-            Button(action: { viewModel.toggleFlash() }) {
+            Button {
+                viewModel.toggleFlash()
+            } label: {
                 VStack(spacing: 4) {
                     Image(systemName: viewModel.isFlashOn ? "bolt.fill" : "bolt.slash")
                         .font(.system(size: 24))

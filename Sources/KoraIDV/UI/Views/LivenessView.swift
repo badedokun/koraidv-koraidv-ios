@@ -65,7 +65,9 @@ struct LivenessView: View {
 
     private var headerView: some View {
         HStack {
-            Button(action: onCancel) {
+            Button {
+                onCancel()
+            } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 20, weight: .medium))
                     .foregroundColor(.white)
