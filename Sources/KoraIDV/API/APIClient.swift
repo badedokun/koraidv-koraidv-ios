@@ -321,7 +321,7 @@ struct APIErrorResponse: Decodable {
     let errors: [ValidationError]?
 }
 
-struct ValidationError: Decodable {
-    let field: String
-    let message: String
+public struct ValidationError: Decodable {
+    public let field: String
+    public let message: String
 }
