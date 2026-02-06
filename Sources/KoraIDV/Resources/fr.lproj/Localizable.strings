@@ -27,16 +27,18 @@
 "koraidv.documentSelection.category.other" = "Autres documents";
 
 /* Document Types */
-"koraidv.document.usPassport" = "Passeport américain";
-"koraidv.document.usDriversLicense" = "Permis de conduire américain";
-"koraidv.document.usStateId" = "Carte d'identité américaine";
-"koraidv.document.internationalPassport" = "Passeport international";
-"koraidv.document.ukPassport" = "Passeport britannique";
-"koraidv.document.euIdCard" = "Carte d'identité européenne";
+"koraidv.document.usDriversLicense" = "Permis de conduire";
+"koraidv.document.usStateId" = "Carte d'identité d'État";
+"koraidv.document.usGreenCard" = "Carte de résident permanent";
+"koraidv.document.internationalPassport" = "Passeport";
+"koraidv.document.euIdGermany" = "Carte d'identité nationale (Allemagne)";
+"koraidv.document.euIdFrance" = "Carte d'identité nationale (France)";
+"koraidv.document.euIdSpain" = "Documento Nacional de Identidad (Espagne)";
+"koraidv.document.euIdItaly" = "Carta d'identità (Italie)";
 "koraidv.document.ghanaCard" = "Carte ghanéenne";
-"koraidv.document.ngNin" = "NIN nigérian";
-"koraidv.document.keId" = "Carte d'identité kenyane";
-"koraidv.document.zaId" = "Carte d'identité sud-africaine";
+"koraidv.document.ngNin" = "Fiche NIN";
+"koraidv.document.keId" = "Carte d'identité nationale";
+"koraidv.document.zaId" = "Carte d'identité intelligente";
 
 /* Document Capture */
 "koraidv.documentCapture.title.front" = "Recto du document";

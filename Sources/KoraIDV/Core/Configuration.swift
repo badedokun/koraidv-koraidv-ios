@@ -102,13 +102,12 @@ public enum APIEnvironment {
 /// Supported document types
 public enum DocumentType: String, CaseIterable, Codable {
     // US Documents
-    case usPassport = "us_passport"
     case usDriversLicense = "us_drivers_license"
     case usStateId = "us_state_id"
+    case usGreenCard = "us_green_card"
 
-    // International
+    // Passport (all countries)
     case internationalPassport = "international_passport"
-    case ukPassport = "uk_passport"
 
     // EU ID Cards
     case euIdGermany = "eu_id_de"
@@ -116,7 +115,7 @@ public enum DocumentType: String, CaseIterable, Codable {
     case euIdSpain = "eu_id_es"
     case euIdItaly = "eu_id_it"
 
-    // Africa (Priority 2)
+    // Africa
     case ghanaCard = "ghana_card"
     case nigeriaNin = "ng_nin"
     case kenyaId = "ke_id"
@@ -125,29 +124,28 @@ public enum DocumentType: String, CaseIterable, Codable {
     /// Display name for the document type
     public var displayName: String {
         switch self {
-        case .usPassport: return "US Passport"
-        case .usDriversLicense: return "US Driver's License"
-        case .usStateId: return "US State ID"
-        case .internationalPassport: return "International Passport"
-        case .ukPassport: return "UK Passport"
-        case .euIdGermany: return "German ID Card"
-        case .euIdFrance: return "French ID Card"
-        case .euIdSpain: return "Spanish ID Card"
-        case .euIdItaly: return "Italian ID Card"
+        case .usDriversLicense: return "Driver's License"
+        case .usStateId: return "State ID Card"
+        case .usGreenCard: return "Permanent Resident Card"
+        case .internationalPassport: return "Passport"
+        case .euIdGermany: return "National ID Card (Germany)"
+        case .euIdFrance: return "National ID Card (France)"
+        case .euIdSpain: return "National ID Card (Spain)"
+        case .euIdItaly: return "National ID Card (Italy)"
         case .ghanaCard: return "Ghana Card"
-        case .nigeriaNin: return "Nigeria NIN"
-        case .kenyaId: return "Kenya ID"
-        case .southAfricaId: return "South Africa ID"
+        case .nigeriaNin: return "NIN Slip"
+        case .kenyaId: return "National ID"
+        case .southAfricaId: return "Smart ID Card"
         }
     }
 
     /// Whether this document type has MRZ
     public var hasMRZ: Bool {
         switch self {
-        case .usPassport, .internationalPassport, .ukPassport:
+        case .internationalPassport:
             return true
         case .euIdGermany, .euIdFrance, .euIdSpain, .euIdItaly:
-            return true // Most EU IDs have MRZ
+            return true
         default:
             return false
         }
@@ -156,10 +154,12 @@ public enum DocumentType: String, CaseIterable, Codable {
     /// Whether this document requires back capture
     public var requiresBack: Bool {
         switch self {
-        case .usDriversLicense, .usStateId, .kenyaId:
+        case .usDriversLicense, .usStateId, .usGreenCard, .kenyaId:
             return true
         case .euIdGermany, .euIdFrance, .euIdSpain, .euIdItaly:
-            return true // EU IDs typically need back
+            return true
+        case .ghanaCard, .southAfricaId:
+            return true
         default:
             return false
         }

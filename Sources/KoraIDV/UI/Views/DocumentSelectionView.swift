@@ -147,12 +147,10 @@ struct DocumentSelectionView: View {
 
     private func documentCategory(for type: DocumentType) -> String {
         switch type {
-        case .usPassport, .usDriversLicense, .usStateId:
+        case .usDriversLicense, .usStateId, .usGreenCard:
             return "United States"
         case .internationalPassport:
-            return "International"
-        case .ukPassport:
-            return "United Kingdom"
+            return "Passport"
         case .euIdGermany, .euIdFrance, .euIdSpain, .euIdItaly:
             return "European Union"
         case .ghanaCard, .nigeriaNin, .kenyaId, .southAfricaId:
@@ -162,10 +160,12 @@ struct DocumentSelectionView: View {
 
     private func documentIcon(for type: DocumentType) -> String {
         switch type {
-        case .usPassport, .internationalPassport, .ukPassport:
+        case .internationalPassport:
             return "book.closed.fill"
         case .usDriversLicense:
             return "car.fill"
+        case .usGreenCard:
+            return "person.crop.rectangle.fill"
         default:
             return "person.text.rectangle.fill"
         }

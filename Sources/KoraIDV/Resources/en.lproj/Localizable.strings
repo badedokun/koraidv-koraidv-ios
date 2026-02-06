@@ -27,16 +27,18 @@
 "koraidv.documentSelection.category.other" = "Other Documents";
 
 /* Document Types */
-"koraidv.document.usPassport" = "US Passport";
-"koraidv.document.usDriversLicense" = "US Driver's License";
-"koraidv.document.usStateId" = "US State ID";
-"koraidv.document.internationalPassport" = "International Passport";
-"koraidv.document.ukPassport" = "UK Passport";
-"koraidv.document.euIdCard" = "EU ID Card";
+"koraidv.document.usDriversLicense" = "Driver's License";
+"koraidv.document.usStateId" = "State ID Card";
+"koraidv.document.usGreenCard" = "Permanent Resident Card";
+"koraidv.document.internationalPassport" = "Passport";
+"koraidv.document.euIdGermany" = "National ID Card (Germany)";
+"koraidv.document.euIdFrance" = "National ID Card (France)";
+"koraidv.document.euIdSpain" = "National ID Card (Spain)";
+"koraidv.document.euIdItaly" = "National ID Card (Italy)";
 "koraidv.document.ghanaCard" = "Ghana Card";
-"koraidv.document.ngNin" = "Nigeria NIN";
-"koraidv.document.keId" = "Kenya ID";
-"koraidv.document.zaId" = "South Africa ID";
+"koraidv.document.ngNin" = "NIN Slip";
+"koraidv.document.keId" = "National ID";
+"koraidv.document.zaId" = "Smart ID Card";
 
 /* Document Capture */
 "koraidv.documentCapture.title.front" = "Document Front";
