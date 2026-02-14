@@ -1,173 +1,117 @@
 import SwiftUI
 
-/// Document selection view
+/// Document selection view - matches mockup screen 3
 struct DocumentSelectionView: View {
     let allowedTypes: [DocumentType]
+    let selectedCountry: CountryInfo?
     let onSelect: (DocumentType) -> Void
     let onCancel: () -> Void
 
-    @Environment(\.koraTheme) private var theme
-    @State private var selectedType: DocumentType?
-
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            headerView
+            // Progress bar (step 2/5)
+            StepProgressBar(total: 5, current: 2)
+
+            // Header with back button
+            HStack(spacing: 12) {
+                LightBackButton(action: onCancel)
+                Text("Choose your document")
+                    .font(.system(size: 18, weight: .semibold))
+                    .tracking(-0.3)
+                    .foregroundColor(KoraColors.TextPrimary)
+                Spacer()
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 12)
+
+            // Country indicator
+            if let country = selectedCountry {
+                Text("\(country.flagEmoji) \(country.name)")
+                    .font(.system(size: 14))
+                    .foregroundColor(KoraColors.TextSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 8)
+            }
 
             // Document list
             ScrollView {
-                LazyVStack(spacing: 12) {
-                    ForEach(groupedDocuments.keys.sorted(), id: \.self) { category in
-                        documentSection(category: category, types: groupedDocuments[category] ?? [])
+                LazyVStack(spacing: 10) {
+                    ForEach(allowedTypes, id: \.self) { docType in
+                        DocumentCard(docType: docType) {
+                            onSelect(docType)
+                        }
                     }
                 }
-                .padding(theme.padding)
-            }
-
-            // Footer
-            footerView
-        }
-        .background(theme.backgroundColor)
-    }
-
-    private var headerView: some View {
-        VStack(spacing: 4) {
-            Text("Select Document Type")
-                .font(theme.titleFont)
-                .foregroundColor(theme.textColor)
-
-            Text("Choose the type of ID you'll use for verification")
-                .font(theme.bodyFont)
-                .foregroundColor(theme.secondaryTextColor)
-        }
-        .padding(theme.padding)
-    }
-
-    private var footerView: some View {
-        VStack(spacing: 12) {
-            Button {
-                if let type = selectedType {
-                    onSelect(type)
-                }
-            } label: {
-                Text("Continue")
-                    .font(theme.bodyFont.weight(Font.Weight.semibold))
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(selectedType != nil ? theme.primaryColor : theme.primaryColor.opacity(0.5))
-                    .cornerRadius(theme.cornerRadius)
-            }
-            .disabled(selectedType == nil)
-
-            Button {
-                onCancel()
-            } label: {
-                Text("Cancel")
-                    .font(theme.bodyFont)
-                    .foregroundColor(theme.secondaryTextColor)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 8)
             }
         }
-        .padding(theme.padding)
+        .background(Color.white)
     }
+}
 
-    private func documentSection(category: String, types: [DocumentType]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(category)
-                .font(theme.captionFont.weight(Font.Weight.semibold))
-                .foregroundColor(theme.secondaryTextColor)
-                .textCase(.uppercase)
+// MARK: - Document Card
 
-            ForEach(types, id: \.self) { type in
-                documentRow(type: type)
-            }
-        }
-    }
+private struct DocumentCard: View {
+    let docType: DocumentType
+    let onClick: () -> Void
 
-    private func documentRow(type: DocumentType) -> some View {
-        Button {
-            selectedType = type
-        } label: {
+    var body: some View {
+        Button(action: onClick) {
             HStack(spacing: 16) {
-                Image(systemName: documentIcon(for: type))
-                    .font(.system(size: 24))
-                    .foregroundColor(theme.primaryColor)
-                    .frame(width: 40)
+                // Icon
+                Image(systemName: iconName)
+                    .font(.system(size: 18))
+                    .foregroundColor(iconTint)
+                    .frame(width: 48, height: 48)
+                    .background(iconBg)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
 
+                // Text
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(type.displayName)
-                        .font(theme.bodyFont)
-                        .foregroundColor(theme.textColor)
-
-                    if type.requiresBack {
-                        Text("Front and back required")
-                            .font(theme.smallFont)
-                            .foregroundColor(theme.secondaryTextColor)
-                    }
+                    Text(docType.displayName)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(KoraColors.TextPrimary)
+                    Text(docType.requiresBack ? "Front & back required" : "Photo page only")
+                        .font(.system(size: 13))
+                        .foregroundColor(KoraColors.TextSecondary)
                 }
 
                 Spacer()
 
-                if selectedType == type {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(theme.primaryColor)
-                } else {
-                    Circle()
-                        .stroke(theme.secondaryTextColor.opacity(0.3), lineWidth: 2)
-                        .frame(width: 24, height: 24)
-                }
+                // Chevron
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(Color(hex: "#CCCCCC"))
             }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: theme.cornerRadius)
-                    .fill(selectedType == type ? theme.primaryColor.opacity(0.1) : theme.surfaceColor)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: theme.cornerRadius)
-                    .stroke(selectedType == type ? theme.primaryColor : Color.clear, lineWidth: 2)
-            )
+            .padding(.horizontal, 16)
+            .padding(.vertical, 18)
+            .background(KoraColors.Surface)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(PlainButtonStyle())
     }
 
-    private var groupedDocuments: [String: [DocumentType]] {
-        var groups: [String: [DocumentType]] = [:]
-
-        for type in allowedTypes {
-            let category = documentCategory(for: type)
-            if groups[category] == nil {
-                groups[category] = []
-            }
-            groups[category]?.append(type)
-        }
-
-        return groups
+    private var iconName: String {
+        let name = docType.rawValue
+        if name.contains("passport") { return "book.closed.fill" }
+        if name.contains("driver") { return "creditcard.fill" }
+        if name.contains("green_card") || name.contains("resident") { return "person.text.rectangle.fill" }
+        return "creditcard.fill"
     }
 
-    private func documentCategory(for type: DocumentType) -> String {
-        switch type {
-        case .usDriversLicense, .usStateId, .usGreenCard:
-            return "United States"
-        case .internationalPassport:
-            return "Passport"
-        case .euIdGermany, .euIdFrance, .euIdSpain, .euIdItaly:
-            return "European Union"
-        case .ghanaCard, .nigeriaNin, .kenyaId, .southAfricaId:
-            return "Africa"
-        }
+    private var iconBg: Color {
+        let name = docType.rawValue
+        if name.contains("passport") { return KoraColors.WarningAmberLight }
+        if name.contains("green_card") || name.contains("resident") { return KoraColors.IndigoLight }
+        return KoraColors.InfoBlueLight
     }
 
-    private func documentIcon(for type: DocumentType) -> String {
-        switch type {
-        case .internationalPassport:
-            return "book.closed.fill"
-        case .usDriversLicense:
-            return "car.fill"
-        case .usGreenCard:
-            return "person.crop.rectangle.fill"
-        default:
-            return "person.text.rectangle.fill"
-        }
+    private var iconTint: Color {
+        let name = docType.rawValue
+        if name.contains("passport") { return KoraColors.WarningAmber }
+        if name.contains("green_card") || name.contains("resident") { return KoraColors.Indigo }
+        return KoraColors.InfoBlue
     }
 }

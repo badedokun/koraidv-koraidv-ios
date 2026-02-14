@@ -5,6 +5,7 @@ import PackageDescription
 
 let package = Package(
     name: "KoraIDV",
+    defaultLocalization: "en",
     platforms: [
         .iOS(.v14)
     ],

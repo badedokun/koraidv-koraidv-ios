@@ -1,7 +1,8 @@
 import SwiftUI
+import UIKit
 import AVFoundation
 
-/// Document capture view
+/// Document capture view - matches mockup screens 4-6
 struct DocumentCaptureView: View {
     let documentType: DocumentType
     let side: DocumentSide
@@ -10,244 +11,243 @@ struct DocumentCaptureView: View {
     let onCancel: () -> Void
 
     @StateObject private var viewModel = DocumentCaptureViewModel()
-    @State private var showManualCapture = false
+    @State private var showReview = false
+    @State private var capturedImageData: Data?
 
     var body: some View {
+        ZStack {
+            if showReview, let imageData = capturedImageData {
+                documentReviewView(imageData: imageData)
+            } else {
+                documentCaptureView
+            }
+        }
+        .onAppear {
+            viewModel.startCapture { imageData in
+                capturedImageData = imageData
+                showReview = true
+            }
+        }
+        .onDisappear {
+            viewModel.stopCapture()
+        }
+    }
+
+    // MARK: - Capture View
+
+    private var documentCaptureView: some View {
         ZStack {
             // Camera preview
             CameraPreviewView(cameraManager: viewModel.cameraManager)
                 .ignoresSafeArea()
 
-            // Overlay
-            VStack {
-                // Header
-                headerView
-
-                Spacer()
-
-                // Document frame overlay
-                documentFrameView
-
-                Spacer()
-
-                // Instructions
-                instructionsView
-
-                // Capture button
-                captureButtonView
-            }
-
-            // Loading overlay
-            if viewModel.isProcessing {
-                processingOverlay
-            }
-        }
-        .onAppear {
-            viewModel.startCapture(onCapture: onCapture)
-        }
-        .onDisappear {
-            viewModel.stopCapture()
-        }
-        .koraTheme(theme)
-    }
-
-    private var headerView: some View {
-        HStack {
-            Button {
-                onCancel()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(.white)
-                    .padding(12)
-                    .background(Color.black.opacity(0.3))
-                    .clipShape(Circle())
-            }
-
-            Spacer()
-
-            VStack(spacing: 2) {
-                Text(side == .front ? "Front of Document" : "Back of Document")
-                    .font(theme.headlineFont)
-                    .foregroundColor(.white)
-
-                Text(documentType.displayName)
-                    .font(theme.captionFont)
-                    .foregroundColor(.white.opacity(0.8))
-            }
-
-            Spacer()
-
-            // Spacer for balance
-            Color.clear
-                .frame(width: 44, height: 44)
-        }
-        .padding()
-        .background(
-            LinearGradient(
-                gradient: Gradient(colors: [Color.black.opacity(0.6), Color.clear]),
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
-    }
-
-    private var documentFrameView: some View {
-        GeometryReader { geometry in
-            let frameWidth = geometry.size.width - 40
-            let frameHeight = frameWidth * 0.63 // ID card aspect ratio
-
-            ZStack {
-                // Darkened background
-                Color.black.opacity(0.5)
-                    .mask(
-                        Rectangle()
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .frame(width: frameWidth, height: frameHeight)
-                                    .blendMode(.destinationOut)
-                            )
-                    )
-
-                // Document frame
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(
-                        viewModel.isDocumentDetected ? theme.successColor : Color.white,
-                        lineWidth: 3
-                    )
-                    .frame(width: frameWidth, height: frameHeight)
-
-                // Corner guides
-                DocumentCornerGuides(
-                    width: frameWidth,
-                    height: frameHeight,
-                    color: viewModel.isDocumentDetected ? theme.successColor : Color.white
-                )
-            }
-        }
-    }
-
-    private var instructionsView: some View {
-        VStack(spacing: 8) {
-            if let feedback = viewModel.feedbackMessage {
-                Text(feedback)
-                    .font(theme.bodyFont)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.black.opacity(0.6))
-                    .cornerRadius(8)
-            } else {
-                Text("Position document within the frame")
-                    .font(theme.bodyFont)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.black.opacity(0.6))
-                    .cornerRadius(8)
-            }
-        }
-        .padding(.bottom, 20)
-    }
-
-    private var captureButtonView: some View {
-        HStack(spacing: 40) {
-            // Manual capture toggle
-            Button {
-                showManualCapture.toggle()
-            } label: {
-                VStack(spacing: 4) {
-                    Image(systemName: showManualCapture ? "a.circle.fill" : "a.circle")
-                        .font(.system(size: 24))
-                    Text("Manual")
-                        .font(theme.smallFont)
-                }
-                .foregroundColor(.white)
-            }
-
-            // Capture button
-            Button {
-                viewModel.captureManually()
-            } label: {
-                ZStack {
-                    Circle()
-                        .stroke(Color.white, lineWidth: 4)
-                        .frame(width: 72, height: 72)
-
-                    Circle()
-                        .fill(Color.white)
-                        .frame(width: 60, height: 60)
-                }
-            }
-            .disabled(!showManualCapture && !viewModel.isDocumentDetected)
-
-            // Flash toggle
-            Button {
-                viewModel.toggleFlash()
-            } label: {
-                VStack(spacing: 4) {
-                    Image(systemName: viewModel.isFlashOn ? "bolt.fill" : "bolt.slash")
-                        .font(.system(size: 24))
-                    Text("Flash")
-                        .font(theme.smallFont)
-                }
-                .foregroundColor(.white)
-            }
-        }
-        .padding(.bottom, 40)
-        .background(
-            LinearGradient(
-                gradient: Gradient(colors: [Color.clear, Color.black.opacity(0.6)]),
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
-    }
-
-    private var processingOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.7)
+            // Dark overlay
+            Color.black.opacity(0.4)
                 .ignoresSafeArea()
 
-            VStack(spacing: 16) {
-                ProgressView()
-                    .scaleEffect(1.5)
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+            VStack(spacing: 0) {
+                // Progress bar (step 3/5, dark)
+                StepProgressBar(total: 5, current: 3, isDark: true)
 
-                Text("Processing...")
-                    .font(theme.bodyFont)
-                    .foregroundColor(.white)
+                // Header
+                DarkScreenHeader(
+                    title: side == .front ? "Front of ID" : "Back of ID",
+                    subtitle: documentType.displayName,
+                    onClose: onCancel
+                )
+
+                Spacer()
+
+                // Document viewfinder
+                documentViewfinder
+
+                Spacer().frame(height: 16)
+
+                // Step pills
+                HStack(spacing: 8) {
+                    StepPill(
+                        text: "Front",
+                        state: side == .front ? .active : .done
+                    )
+                    if documentType.requiresBack {
+                        StepPill(
+                            text: "Back",
+                            state: side == .back ? .active : .inactive
+                        )
+                    }
+                }
+
+                Spacer().frame(height: 16)
+
+                // Guidance pill
+                GuidancePill(
+                    text: viewModel.isDocumentDetected ? "Hold steady..." : "Scanning document...",
+                    variant: viewModel.isDocumentDetected ? .ready : .scanning
+                )
+
+                Spacer().frame(height: 40)
             }
+
+            // Processing overlay
+            if viewModel.isProcessing {
+                Color.black.opacity(0.7)
+                    .ignoresSafeArea()
+                VStack(spacing: 16) {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .accentColor(.white)
+                    Text("Processing...")
+                        .font(.system(size: 15))
+                        .foregroundColor(.white)
+                }
+            }
+        }
+        .background(KoraColors.DarkBg)
+    }
+
+    private var documentViewfinder: some View {
+        GeometryReader { geometry in
+            let maxWidth: CGFloat = min(342, geometry.size.width - 48)
+            let frameHeight = maxWidth / 1.586
+
+            ZStack {
+                // Document frame
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(
+                        viewModel.isDocumentDetected ? KoraColors.Teal : Color.white.opacity(0.3),
+                        lineWidth: 2
+                    )
+                    .frame(width: maxWidth, height: frameHeight)
+
+                // Corner brackets
+                CornerBrackets(
+                    width: maxWidth,
+                    height: frameHeight,
+                    color: KoraColors.Teal,
+                    length: 28,
+                    lineWidth: 3
+                )
+
+                // Scan line animation
+                if !viewModel.isDocumentDetected {
+                    ScanLineView()
+                        .frame(width: maxWidth - 20, height: frameHeight - 20)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .frame(height: 250)
+    }
+
+    // MARK: - Review View
+
+    private func documentReviewView(imageData: Data) -> some View {
+        VStack(spacing: 0) {
+            StepProgressBar(total: 5, current: 3, isDark: true)
+
+            DarkScreenHeader(
+                title: "Review your photo",
+                onClose: onCancel
+            )
+
+            Spacer()
+
+            // Review card
+            VStack(spacing: 16) {
+                if let uiImage = UIImage(data: imageData) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: 300, maxHeight: 200)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                }
+
+                ReviewBadge(text: "Good quality")
+
+                // Quality checks
+                HStack(spacing: 20) {
+                    ReviewQualityCheck(label: "Sharp")
+                    ReviewQualityCheck(label: "Well-lit")
+                    ReviewQualityCheck(label: "No glare")
+                }
+            }
+
+            Spacer()
+
+            // Buttons
+            HStack(spacing: 12) {
+                KoraButton(
+                    text: "Retake",
+                    action: {
+                        showReview = false
+                        capturedImageData = nil
+                    },
+                    variant: .darkOutline
+                )
+                .frame(maxWidth: .infinity)
+
+                KoraButton(
+                    text: "Looks good",
+                    action: { onCapture(imageData) }
+                )
+                .frame(maxWidth: .infinity)
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 40)
+        }
+        .background(KoraColors.DarkBg)
+    }
+}
+
+// MARK: - Scan Line
+
+private struct ScanLineView: View {
+    @State private var offset: CGFloat = 0
+
+    var body: some View {
+        GeometryReader { geo in
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            KoraColors.Teal.opacity(0),
+                            KoraColors.Teal.opacity(0.4),
+                            KoraColors.Teal.opacity(0)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(height: 2)
+                .offset(y: offset)
+                .onAppear {
+                    withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true)) {
+                        offset = geo.size.height
+                    }
+                }
         }
     }
 }
 
-// MARK: - Document Corner Guides
+// MARK: - Corner Brackets
 
-struct DocumentCornerGuides: View {
+struct CornerBrackets: View {
     let width: CGFloat
     let height: CGFloat
     let color: Color
-
-    private let cornerLength: CGFloat = 30
-    private let lineWidth: CGFloat = 4
+    var length: CGFloat = 28
+    var lineWidth: CGFloat = 3
 
     var body: some View {
         ZStack {
-            // Top left
-            CornerShape(position: .topLeft, length: cornerLength)
+            CornerShape(position: .topLeft, length: length)
                 .stroke(color, lineWidth: lineWidth)
-
-            // Top right
-            CornerShape(position: .topRight, length: cornerLength)
+            CornerShape(position: .topRight, length: length)
                 .stroke(color, lineWidth: lineWidth)
-
-            // Bottom left
-            CornerShape(position: .bottomLeft, length: cornerLength)
+            CornerShape(position: .bottomLeft, length: length)
                 .stroke(color, lineWidth: lineWidth)
-
-            // Bottom right
-            CornerShape(position: .bottomRight, length: cornerLength)
+            CornerShape(position: .bottomRight, length: length)
                 .stroke(color, lineWidth: lineWidth)
         }
         .frame(width: width, height: height)
@@ -350,18 +350,12 @@ class DocumentCaptureViewModel: ObservableObject {
         isProcessing = true
         cameraManager.capturePhoto()
     }
-
-    func toggleFlash() {
-        isFlashOn.toggle()
-        // Flash toggle implementation would go here
-    }
 }
 
 extension DocumentCaptureViewModel: CameraManagerDelegate {
     func cameraManager(_ manager: CameraManager, didCapturePhoto imageData: Data) {
         isCapturing = false
 
-        // Validate quality
         guard let image = UIImage(data: imageData) else {
             DispatchQueue.main.async {
                 self.isProcessing = false
@@ -395,7 +389,6 @@ extension DocumentCaptureViewModel: CameraManagerDelegate {
 
                     if result.isStable {
                         self?.feedbackMessage = "Hold steady..."
-                        // Auto-capture when stable
                         if self?.isCapturing == false {
                             self?.captureManually()
                         }

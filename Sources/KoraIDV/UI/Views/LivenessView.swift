@@ -1,7 +1,7 @@
 import SwiftUI
 import AVFoundation
 
-/// Liveness check view
+/// Liveness check view - matches mockup screen 9
 struct LivenessView: View {
     let session: LivenessSession
     let theme: KoraTheme
@@ -32,25 +32,76 @@ struct LivenessView: View {
             LivenessCameraPreviewView(livenessManager: viewModel.livenessManager)
                 .ignoresSafeArea()
 
-            // Overlay
-            VStack {
-                // Header
-                headerView
+            Color.black.opacity(0.4)
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                // Progress bar (step 5/5, dark)
+                StepProgressBar(total: 5, current: 5, isDark: true)
+
+                DarkScreenHeader(
+                    title: "Liveness Check",
+                    onClose: onCancel
+                )
+
+                Spacer().frame(height: 16)
+
+                // Challenge title
+                if let challenge = viewModel.currentChallenge {
+                    Text(challenge.instruction)
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                } else {
+                    Text("Preparing...")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(.white)
+                }
+
+                Spacer().frame(height: 24)
+
+                // Oval viewfinder with progress ring
+                ZStack {
+                    // Background oval
+                    Ellipse()
+                        .stroke(Color.white.opacity(0.2), lineWidth: 3)
+                        .frame(width: 240, height: 300)
+
+                    // Progress ring
+                    Ellipse()
+                        .trim(from: 0, to: CGFloat(viewModel.challengeProgress))
+                        .stroke(KoraColors.Teal, lineWidth: 5)
+                        .frame(width: 248, height: 308)
+                        .rotationEffect(.degrees(-90))
+                        .animation(.linear(duration: 0.1), value: viewModel.challengeProgress)
+
+                    // Countdown badge
+                    if viewModel.countdown > 0 {
+                        CountdownBadge(count: viewModel.countdown)
+                            .offset(y: -130)
+                    }
+                }
+
+                Spacer().frame(height: 24)
+
+                // Challenge progress dots
+                ChallengeDots(
+                    total: session.challenges.count,
+                    currentIndex: viewModel.completedChallenges
+                )
+
+                Spacer().frame(height: 12)
+
+                // Challenge info text
+                Text("Challenge \(viewModel.completedChallenges + 1) of \(session.challenges.count)")
+                    .font(.system(size: 14))
+                    .foregroundColor(.white.opacity(0.6))
 
                 Spacer()
-
-                // Face guide
-                faceGuideView
-
-                Spacer()
-
-                // Challenge instruction
-                challengeInstructionView
-
-                // Progress indicator
-                progressIndicatorView
             }
         }
+        .background(KoraColors.DarkBg)
         .onAppear {
             viewModel.start(
                 onChallengeComplete: onChallengeComplete,
@@ -59,154 +110,6 @@ struct LivenessView: View {
         }
         .onDisappear {
             viewModel.stop()
-        }
-        .koraTheme(theme)
-    }
-
-    private var headerView: some View {
-        HStack {
-            Button {
-                onCancel()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(.white)
-                    .padding(12)
-                    .background(Color.black.opacity(0.3))
-                    .clipShape(Circle())
-            }
-
-            Spacer()
-
-            Text("Liveness Check")
-                .font(theme.headlineFont)
-                .foregroundColor(.white)
-
-            Spacer()
-
-            Color.clear
-                .frame(width: 44, height: 44)
-        }
-        .padding()
-        .background(
-            LinearGradient(
-                gradient: Gradient(colors: [Color.black.opacity(0.6), Color.clear]),
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
-    }
-
-    private var faceGuideView: some View {
-        GeometryReader { geometry in
-            let size = min(geometry.size.width, geometry.size.height) * 0.7
-
-            ZStack {
-                // Darkened background with oval cutout
-                Color.black.opacity(0.5)
-                    .mask(
-                        Rectangle()
-                            .overlay(
-                                Ellipse()
-                                    .frame(width: size, height: size * 1.3)
-                                    .blendMode(.destinationOut)
-                            )
-                    )
-
-                // Oval guide
-                Ellipse()
-                    .stroke(Color.white, lineWidth: 4)
-                    .frame(width: size, height: size * 1.3)
-
-                // Challenge progress ring
-                Ellipse()
-                    .trim(from: 0, to: CGFloat(viewModel.challengeProgress))
-                    .stroke(theme.successColor, lineWidth: 6)
-                    .frame(width: size + 10, height: size * 1.3 + 10)
-                    .rotationEffect(.degrees(-90))
-                    .animation(.linear(duration: 0.1), value: viewModel.challengeProgress)
-
-                // Challenge icon
-                if let challenge = viewModel.currentChallenge {
-                    challengeIcon(for: challenge.type)
-                        .font(.system(size: 60))
-                        .foregroundColor(.white.opacity(0.8))
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-    }
-
-    private var challengeInstructionView: some View {
-        VStack(spacing: 12) {
-            if let challenge = viewModel.currentChallenge {
-                Text(challenge.instruction)
-                    .font(theme.headlineFont)
-                    .foregroundColor(.white)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                    .padding(.vertical, 16)
-                    .background(Color.black.opacity(0.6))
-                    .cornerRadius(12)
-            } else {
-                Text("Preparing...")
-                    .font(theme.bodyFont)
-                    .foregroundColor(.white)
-            }
-        }
-        .padding(.bottom, 20)
-    }
-
-    private var progressIndicatorView: some View {
-        VStack(spacing: 16) {
-            // Challenge dots
-            HStack(spacing: 8) {
-                ForEach(0..<session.challenges.count, id: \.self) { index in
-                    Circle()
-                        .fill(dotColor(for: index))
-                        .frame(width: 12, height: 12)
-                }
-            }
-
-            Text("Challenge \(viewModel.completedChallenges + 1) of \(session.challenges.count)")
-                .font(theme.captionFont)
-                .foregroundColor(.white.opacity(0.8))
-        }
-        .padding(.bottom, 40)
-        .background(
-            LinearGradient(
-                gradient: Gradient(colors: [Color.clear, Color.black.opacity(0.6)]),
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
-    }
-
-    private func dotColor(for index: Int) -> Color {
-        if index < viewModel.completedChallenges {
-            return theme.successColor
-        } else if index == viewModel.completedChallenges {
-            return theme.primaryColor
-        } else {
-            return Color.white.opacity(0.3)
-        }
-    }
-
-    @ViewBuilder
-    private func challengeIcon(for type: ChallengeType) -> some View {
-        switch type {
-        case .blink:
-            Image(systemName: "eye")
-        case .smile:
-            Image(systemName: "face.smiling")
-        case .turnLeft:
-            Image(systemName: "arrow.left")
-        case .turnRight:
-            Image(systemName: "arrow.right")
-        case .nodUp:
-            Image(systemName: "arrow.up")
-        case .nodDown:
-            Image(systemName: "arrow.down")
         }
     }
 }
@@ -236,6 +139,7 @@ class LivenessViewModel: ObservableObject {
     @Published var currentChallenge: LivenessChallenge?
     @Published var challengeProgress: Float = 0
     @Published var completedChallenges: Int = 0
+    @Published var countdown: Int = 0
 
     let livenessManager = LivenessManager()
     private let session: LivenessSession
@@ -272,6 +176,8 @@ extension LivenessViewModel: LivenessManagerDelegate {
         DispatchQueue.main.async {
             self.currentChallenge = challenge
             self.challengeProgress = 0
+            self.countdown = 3
+            self.startCountdown()
         }
     }
 
@@ -285,9 +191,6 @@ extension LivenessViewModel: LivenessManagerDelegate {
         DispatchQueue.main.async {
             self.completedChallenges += 1
         }
-
-        // In a real implementation, we'd pass the image data from the challenge
-        // For now, passing empty data as placeholder
         onChallengeComplete?(challenge, Data())
     }
 
@@ -299,5 +202,15 @@ extension LivenessViewModel: LivenessManagerDelegate {
 
     func livenessManager(_ manager: LivenessManager, didFail error: KoraError) {
         print("Liveness failed: \(error)")
+    }
+
+    private func startCountdown() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            guard let self = self, self.countdown > 0 else { return }
+            self.countdown -= 1
+            if self.countdown > 0 {
+                self.startCountdown()
+            }
+        }
     }
 }

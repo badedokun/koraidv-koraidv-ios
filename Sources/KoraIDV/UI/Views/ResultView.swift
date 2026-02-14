@@ -1,196 +1,471 @@
 import SwiftUI
 
-/// Verification result view
-struct ResultView: View {
-    let verification: Verification
-    let theme: KoraTheme
-    let onDone: () -> Void
+// MARK: - Processing Screen (Screen 10)
 
-    @Environment(\.koraTheme) private var envTheme
+struct ProcessingScreen: View {
+    let steps: [ProcessingStepItem]
+
+    @State private var outerRotation: Double = 0
+    @State private var innerRotation: Double = 0
+    @State private var coreRotation: Double = 0
 
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
 
-            // Result icon
-            resultIcon
+            // Spinning rings
+            ZStack {
+                // Outer ring
+                Circle()
+                    .trim(from: 0.2, to: 0.8)
+                    .stroke(KoraColors.Teal.opacity(0.3), lineWidth: 3)
+                    .frame(width: 120, height: 120)
+                    .rotationEffect(.degrees(outerRotation))
 
-            // Title
-            Text(resultTitle)
-                .font(theme.titleFont)
-                .foregroundColor(theme.textColor)
-                .padding(.top, 24)
+                // Inner ring
+                Circle()
+                    .trim(from: 0.3, to: 0.7)
+                    .stroke(KoraColors.Teal.opacity(0.5), lineWidth: 3)
+                    .frame(width: 90, height: 90)
+                    .rotationEffect(.degrees(innerRotation))
 
-            // Subtitle
-            Text(resultSubtitle)
-                .font(theme.bodyFont)
-                .foregroundColor(theme.secondaryTextColor)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-                .padding(.top, 8)
+                // Core ring
+                Circle()
+                    .trim(from: 0.1, to: 0.9)
+                    .stroke(KoraColors.Teal, lineWidth: 3)
+                    .frame(width: 60, height: 60)
+                    .rotationEffect(.degrees(coreRotation))
 
-            // Details card
-            if verification.status == .approved {
-                detailsCard
+                // Shield icon
+                Image(systemName: "shield.checkered")
+                    .font(.system(size: 24))
+                    .foregroundColor(KoraColors.Teal)
             }
+            .onAppear {
+                withAnimation(.linear(duration: 1).repeatForever(autoreverses: false)) {
+                    outerRotation = 360
+                }
+                withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
+                    innerRotation = -360
+                }
+                withAnimation(.linear(duration: 0.8).repeatForever(autoreverses: false)) {
+                    coreRotation = 360
+                }
+            }
+
+            Spacer().frame(height: 32)
+
+            Text("Verifying your identity")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundColor(.white)
+
+            Text("This may take a few moments")
+                .font(.system(size: 14))
+                .foregroundColor(.white.opacity(0.5))
+                .padding(.top, 4)
+
+            Spacer().frame(height: 32)
+
+            // Processing steps
+            VStack(alignment: .leading, spacing: 16) {
+                ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+                    HStack(spacing: 12) {
+                        ZStack {
+                            if step.status == .done {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(KoraColors.Teal)
+                            } else if step.status == .active {
+                                ProgressView()
+                                    .accentColor(KoraColors.Teal)
+                            } else {
+                                Circle()
+                                    .fill(Color.white.opacity(0.15))
+                                    .frame(width: 20, height: 20)
+                            }
+                        }
+                        .frame(width: 20, height: 20)
+
+                        Text(step.label)
+                            .font(.system(size: 15))
+                            .foregroundColor(step.status == .pending ? .white.opacity(0.4) : .white)
+                    }
+                }
+            }
+            .padding(.horizontal, 40)
 
             Spacer()
-
-            // Done button
-            Button {
-                onDone()
-            } label: {
-                Text("Done")
-                    .font(theme.bodyFont.weight(Font.Weight.semibold))
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(theme.primaryColor)
-                    .cornerRadius(theme.cornerRadius)
-            }
-            .padding(theme.padding)
         }
-        .background(theme.backgroundColor)
-        .koraTheme(theme)
+        .background(KoraColors.DarkBg)
     }
+}
 
-    private var resultIcon: some View {
-        ZStack {
-            Circle()
-                .fill(resultColor.opacity(0.1))
-                .frame(width: 120, height: 120)
+struct ProcessingStepItem {
+    let label: String
+    let status: ProcessingStepStatus
+}
 
-            Circle()
-                .fill(resultColor.opacity(0.2))
-                .frame(width: 90, height: 90)
+enum ProcessingStepStatus {
+    case done, active, pending
+}
 
-            Image(systemName: resultIconName)
-                .font(.system(size: 48, weight: .medium))
-                .foregroundColor(resultColor)
-        }
-    }
+// MARK: - Success Screen (Screen 11)
 
-    private var resultColor: Color {
-        switch verification.status {
-        case .approved:
-            return theme.successColor
-        case .rejected:
-            return theme.errorColor
-        case .reviewRequired:
-            return theme.warningColor
-        case .processing:
-            return theme.primaryColor
-        default:
-            return theme.secondaryTextColor
-        }
-    }
+struct SuccessScreen: View {
+    let verification: Verification
+    let onDone: () -> Void
 
-    private var resultIconName: String {
-        switch verification.status {
-        case .approved:
-            return "checkmark.circle.fill"
-        case .rejected:
-            return "xmark.circle.fill"
-        case .reviewRequired:
-            return "exclamationmark.triangle.fill"
-        case .processing:
-            return "clock.fill"
-        default:
-            return "questionmark.circle.fill"
-        }
-    }
+    var body: some View {
+        let scores = ScoreBreakdown.compute(from: verification)
+        let metrics = buildMetrics(scores: scores)
 
-    private var resultTitle: String {
-        switch verification.status {
-        case .approved:
-            return "Verification Successful"
-        case .rejected:
-            return "Verification Failed"
-        case .reviewRequired:
-            return "Review Required"
-        case .processing:
-            return "Processing"
-        default:
-            return "Verification Status"
-        }
-    }
+        ScrollView {
+            VStack(spacing: 0) {
+                Spacer().frame(height: 40)
 
-    private var resultSubtitle: String {
-        switch verification.status {
-        case .approved:
-            return "Your identity has been successfully verified."
-        case .rejected:
-            return "We couldn't verify your identity. Please try again or contact support."
-        case .reviewRequired:
-            return "Your verification requires manual review. We'll notify you of the result."
-        case .processing:
-            return "Your verification is being processed. This may take a few moments."
-        default:
-            return "Your verification is in progress."
-        }
-    }
+                // Green check icon
+                IconCircle(
+                    iconName: "checkmark",
+                    bgColor: KoraColors.SuccessGreen,
+                    iconColor: .white,
+                    outerRingColor: KoraColors.SuccessGreenBorder
+                )
 
-    @ViewBuilder
-    private var detailsCard: some View {
-        if let docVerification = verification.documentVerification {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    Image(systemName: "person.text.rectangle")
-                        .foregroundColor(theme.primaryColor)
-                    Text("Verified Information")
-                        .font(theme.headlineFont)
-                        .foregroundColor(theme.textColor)
+                Spacer().frame(height: 20)
+
+                Text("Verification approved")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(KoraColors.TextPrimary)
+
+                Text("Your identity has been successfully verified")
+                    .font(.system(size: 14))
+                    .foregroundColor(KoraColors.TextSecondary)
+                    .padding(.top, 4)
+
+                Spacer().frame(height: 24)
+
+                // Score card
+                ScoreCard(
+                    score: scores.overallScore,
+                    badge: "PASSED",
+                    gradient: KoraColors.tealGradient
+                )
+
+                Spacer().frame(height: 16)
+
+                // Metric rows
+                VStack(spacing: 8) {
+                    ForEach(Array(metrics.enumerated()), id: \.offset) { _, metric in
+                        ScoreMetricRow(metric: metric)
+                    }
                 }
+                .padding(.horizontal, 24)
 
+                Spacer().frame(height: 32)
+
+                // Done button
+                KoraButton(text: "Done", action: onDone)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 40)
+            }
+        }
+        .background(Color.white)
+    }
+
+    private func buildMetrics(scores: ScoreBreakdown) -> [ScoreMetric] {
+        [
+            ScoreMetric(label: "Liveness", score: scores.liveness, iconName: "eye.fill", status: scores.liveness >= 70 ? .pass : .fail),
+            ScoreMetric(label: "Name Match", score: scores.nameMatch, iconName: "checkmark.circle.fill", status: scores.nameMatch >= 70 ? .pass : .fail),
+            ScoreMetric(label: "Document Quality", score: scores.documentQuality, iconName: "creditcard.fill", status: scores.documentQuality >= 70 ? .pass : .fail),
+            ScoreMetric(label: "Selfie Match", score: scores.selfieMatch, iconName: "person.fill", status: scores.selfieMatch >= 70 ? .pass : .fail),
+        ]
+    }
+}
+
+// MARK: - Rejected Screen (Screen 12)
+
+struct RejectedScreen: View {
+    let verification: Verification
+    let onRetry: () -> Void
+
+    var body: some View {
+        let scores = ScoreBreakdown.compute(from: verification)
+        let metrics = buildMetrics(scores: scores)
+
+        ScrollView {
+            VStack(spacing: 0) {
+                Spacer().frame(height: 40)
+
+                // Red X icon
+                IconCircle(
+                    iconName: "xmark",
+                    bgColor: KoraColors.ErrorRed,
+                    iconColor: .white,
+                    outerRingColor: KoraColors.ErrorRedBorder
+                )
+
+                Spacer().frame(height: 20)
+
+                Text("Verification rejected")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(KoraColors.TextPrimary)
+
+                Text("We couldn't verify your identity")
+                    .font(.system(size: 14))
+                    .foregroundColor(KoraColors.TextSecondary)
+                    .padding(.top, 4)
+
+                Spacer().frame(height: 24)
+
+                // Score card
+                ScoreCard(
+                    score: scores.overallScore,
+                    badge: "REJECTED",
+                    gradient: KoraColors.redGradient
+                )
+
+                Spacer().frame(height: 16)
+
+                // Metric rows
+                VStack(spacing: 8) {
+                    ForEach(Array(metrics.enumerated()), id: \.offset) { _, metric in
+                        ScoreMetricRow(metric: metric)
+                    }
+                }
+                .padding(.horizontal, 24)
+
+                Spacer().frame(height: 32)
+
+                // Try again button
+                KoraButton(text: "Try again", action: onRetry)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 40)
+            }
+        }
+        .background(Color.white)
+    }
+
+    private func buildMetrics(scores: ScoreBreakdown) -> [ScoreMetric] {
+        [
+            ScoreMetric(
+                label: "Liveness", score: scores.liveness, iconName: "eye.fill",
+                status: scores.liveness >= 70 ? .pass : .fail,
+                errorMessage: scores.liveness < 70 ? "Liveness check failed" : nil
+            ),
+            ScoreMetric(
+                label: "Name Match", score: scores.nameMatch, iconName: "checkmark.circle.fill",
+                status: scores.nameMatch >= 70 ? .pass : .fail,
+                errorMessage: scores.nameMatch < 70 ? "Name does not match" : nil
+            ),
+            ScoreMetric(
+                label: "Document Quality", score: scores.documentQuality, iconName: "creditcard.fill",
+                status: scores.documentQuality >= 70 ? .pass : .fail,
+                errorMessage: scores.documentQuality < 70 ? "Document quality too low" : nil
+            ),
+            ScoreMetric(
+                label: "Selfie Match", score: scores.selfieMatch, iconName: "person.fill",
+                status: scores.selfieMatch >= 70 ? .pass : .fail,
+                errorMessage: scores.selfieMatch < 70 ? "Face does not match document" : nil
+            ),
+        ]
+    }
+}
+
+// MARK: - Expired Document Screen (Screen 13)
+
+struct ExpiredDocumentScreen: View {
+    let verification: Verification
+    let onRetry: () -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                Spacer().frame(height: 40)
+
+                // Amber warning icon
+                IconCircle(
+                    iconName: "exclamationmark.triangle.fill",
+                    bgColor: KoraColors.WarningAmber,
+                    iconColor: .white,
+                    outerRingColor: KoraColors.WarningAmberBorder
+                )
+
+                Spacer().frame(height: 20)
+
+                Text("Document expired")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(KoraColors.TextPrimary)
+
+                Text("The document you provided has expired")
+                    .font(.system(size: 14))
+                    .foregroundColor(KoraColors.TextSecondary)
+                    .padding(.top, 4)
+
+                Spacer().frame(height: 24)
+
+                // Expiry details card
                 VStack(alignment: .leading, spacing: 12) {
-                    if let firstName = docVerification.firstName,
-                       let lastName = docVerification.lastName {
-                        detailRow(label: "Name", value: "\(firstName) \(lastName)")
+                    if let docType = verification.documentVerification?.documentType {
+                        HStack {
+                            Text("Document type")
+                                .font(.system(size: 13))
+                                .foregroundColor(KoraColors.TextSecondary)
+                            Spacer()
+                            Text(docType)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(KoraColors.TextPrimary)
+                        }
                     }
 
-                    if let dob = docVerification.dateOfBirth {
-                        detailRow(label: "Date of Birth", value: formatDate(dob))
+                    if let country = verification.documentVerification?.issuingCountry {
+                        HStack {
+                            Text("Issuing country")
+                                .font(.system(size: 13))
+                                .foregroundColor(KoraColors.TextSecondary)
+                            Spacer()
+                            Text(country)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(KoraColors.TextPrimary)
+                        }
                     }
 
-                    if let docNumber = docVerification.documentNumber {
-                        detailRow(label: "Document", value: maskDocumentNumber(docNumber))
+                    if let expDate = verification.documentVerification?.expirationDate {
+                        HStack {
+                            Text("Expiration date")
+                                .font(.system(size: 13))
+                                .foregroundColor(KoraColors.TextSecondary)
+                            Spacer()
+                            Text(expDate)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(KoraColors.ErrorRed)
+                        }
                     }
                 }
+                .padding(16)
+                .background(KoraColors.WarningAmberLight)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(KoraColors.WarningAmberBorder, lineWidth: 1)
+                )
+                .padding(.horizontal, 24)
+
+                Spacer().frame(height: 24)
+
+                // Guidance tips
+                VStack(alignment: .leading, spacing: 16) {
+                    GuidanceTip(number: 1, text: "Check that your document has not passed its expiration date")
+                    GuidanceTip(number: 2, text: "Ensure you're using a currently valid government-issued ID")
+                    GuidanceTip(number: 3, text: "Contact your local authority to renew an expired document")
+                }
+                .padding(.horizontal, 24)
+
+                Spacer().frame(height: 32)
+
+                // Button
+                KoraButton(text: "Try with a valid document", action: onRetry)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 40)
             }
-            .padding()
-            .background(theme.surfaceColor)
-            .cornerRadius(theme.cornerRadius)
-            .padding(.horizontal, theme.padding)
-            .padding(.top, 32)
         }
+        .background(Color.white)
+    }
+}
+
+// MARK: - Manual Review Screen (Screen 14)
+
+struct ManualReviewScreen: View {
+    let verification: Verification
+    let onDone: () -> Void
+
+    var body: some View {
+        let scores = ScoreBreakdown.compute(from: verification)
+        let metrics = buildMetrics(scores: scores)
+
+        ScrollView {
+            VStack(spacing: 0) {
+                Spacer().frame(height: 40)
+
+                // Blue clock icon
+                IconCircle(
+                    iconName: "clock.fill",
+                    bgColor: KoraColors.InfoBlue,
+                    iconColor: .white,
+                    outerRingColor: KoraColors.InfoBlueBorder
+                )
+
+                Spacer().frame(height: 20)
+
+                Text("Under review")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(KoraColors.TextPrimary)
+
+                Text("Your verification requires manual review")
+                    .font(.system(size: 14))
+                    .foregroundColor(KoraColors.TextSecondary)
+                    .padding(.top, 4)
+
+                Spacer().frame(height: 24)
+
+                // Score card
+                ScoreCard(
+                    score: scores.overallScore,
+                    badge: "REVIEW",
+                    gradient: KoraColors.blueGradient
+                )
+
+                Spacer().frame(height: 16)
+
+                // Metric rows
+                VStack(spacing: 8) {
+                    ForEach(Array(metrics.enumerated()), id: \.offset) { _, metric in
+                        ScoreMetricRow(metric: metric)
+                    }
+                }
+                .padding(.horizontal, 24)
+
+                Spacer().frame(height: 32)
+
+                // Got it button
+                KoraButton(text: "Got it", action: onDone)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 40)
+            }
+        }
+        .background(Color.white)
     }
 
-    private func detailRow(label: String, value: String) -> some View {
-        HStack {
-            Text(label)
-                .font(theme.captionFont)
-                .foregroundColor(theme.secondaryTextColor)
-                .frame(width: 100, alignment: .leading)
-
-            Text(value)
-                .font(theme.bodyFont)
-                .foregroundColor(theme.textColor)
-        }
+    private func buildMetrics(scores: ScoreBreakdown) -> [ScoreMetric] {
+        let selfieStatus: MetricStatus = scores.selfieMatch >= 70 ? .pass : (scores.selfieMatch >= 50 ? .borderline : .fail)
+        return [
+            ScoreMetric(label: "Liveness", score: scores.liveness, iconName: "eye.fill", status: scores.liveness >= 70 ? .pass : .borderline),
+            ScoreMetric(label: "Name Match", score: scores.nameMatch, iconName: "checkmark.circle.fill", status: scores.nameMatch >= 70 ? .pass : .borderline),
+            ScoreMetric(label: "Document Quality", score: scores.documentQuality, iconName: "creditcard.fill", status: scores.documentQuality >= 70 ? .pass : .borderline),
+            ScoreMetric(label: "Selfie Match", score: scores.selfieMatch, iconName: selfieStatus == .borderline ? "info.circle.fill" : "person.fill", status: selfieStatus),
+        ]
     }
+}
 
-    private func formatDate(_ dateString: String) -> String {
-        // Simple date formatting - in production would use DateFormatter
-        if dateString.count == 6 {
-            return MRZReader.formatDate(dateString) ?? dateString
+// MARK: - Guidance Tip
+
+private struct GuidanceTip: View {
+    let number: Int
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text("\(number)")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundColor(KoraColors.Teal)
+                .frame(width: 24, height: 24)
+                .background(KoraColors.SelectedBg)
+                .clipShape(Circle())
+
+            Text(text)
+                .font(.system(size: 14))
+                .foregroundColor(KoraColors.TextTertiary)
+                .lineSpacing(2)
         }
-        return dateString
-    }
-
-    private func maskDocumentNumber(_ number: String) -> String {
-        guard number.count > 4 else { return "****" }
-        let suffix = String(number.suffix(4))
-        let masked = String(repeating: "*", count: number.count - 4)
-        return masked + suffix
     }
 }
 
@@ -203,69 +478,65 @@ struct ErrorView: View {
     let onCancel: () -> Void
 
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: 0) {
             Spacer()
 
             // Error icon
-            ZStack {
-                Circle()
-                    .fill(theme.errorColor.opacity(0.1))
-                    .frame(width: 100, height: 100)
+            IconCircle(
+                iconName: "exclamationmark.circle.fill",
+                bgColor: KoraColors.ErrorRed,
+                iconColor: .white,
+                outerRingColor: KoraColors.ErrorRedBorder
+            )
 
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 40))
-                    .foregroundColor(theme.errorColor)
-            }
+            Spacer().frame(height: 20)
 
-            // Title
             Text("Something went wrong")
-                .font(theme.titleFont)
-                .foregroundColor(theme.textColor)
+                .font(.system(size: 22, weight: .bold))
+                .foregroundColor(KoraColors.TextPrimary)
 
-            // Error message
             Text(error.localizedDescription)
-                .font(theme.bodyFont)
-                .foregroundColor(theme.secondaryTextColor)
+                .font(.system(size: 15))
+                .foregroundColor(KoraColors.TextSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
+                .padding(.top, 8)
 
-            // Recovery suggestion
             if let suggestion = error.recoverySuggestion {
-                Text(suggestion)
-                    .font(theme.captionFont)
-                    .foregroundColor(theme.secondaryTextColor)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                // Guidance card
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "lightbulb.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(KoraColors.WarningAmber)
+
+                    Text(suggestion)
+                        .font(.system(size: 14))
+                        .foregroundColor(KoraColors.TextTertiary)
+                        .lineSpacing(2)
+                }
+                .padding(16)
+                .background(KoraColors.WarningAmberLight)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .padding(.horizontal, 24)
+                .padding(.top, 24)
             }
 
             Spacer()
 
             // Buttons
             VStack(spacing: 12) {
-                Button {
-                    onRetry()
-                } label: {
-                    Text("Try Again")
-                        .font(theme.bodyFont.weight(Font.Weight.semibold))
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(theme.primaryColor)
-                        .cornerRadius(theme.cornerRadius)
-                }
+                KoraButton(text: "Try again", action: onRetry)
 
-                Button {
-                    onCancel()
-                } label: {
-                    Text("Cancel")
-                        .font(theme.bodyFont)
-                        .foregroundColor(theme.secondaryTextColor)
-                }
+                KoraButton(
+                    text: "Cancel",
+                    action: onCancel,
+                    variant: .whiteOutline
+                )
             }
-            .padding(theme.padding)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 40)
         }
-        .background(theme.backgroundColor)
-        .koraTheme(theme)
+        .background(Color.white)
     }
 }
 
@@ -274,18 +545,58 @@ struct ErrorView: View {
 struct LoadingView: View {
     let message: String
 
-    @Environment(\.koraTheme) private var theme
-
     var body: some View {
-        VStack(spacing: 16) {
-            ProgressView()
-                .scaleEffect(1.5)
+        VStack(spacing: 0) {
+            Spacer()
+
+            ZStack {
+                // Pulsing icon
+                Image(systemName: "checkmark.shield.fill")
+                    .font(.system(size: 48))
+                    .foregroundColor(KoraColors.Teal)
+
+                Circle()
+                    .stroke(KoraColors.Teal.opacity(0.3), lineWidth: 2)
+                    .frame(width: 80, height: 80)
+
+                ProgressView()
+                    .scaleEffect(1.2)
+                    .accentColor(KoraColors.Teal)
+                    .frame(width: 100, height: 100)
+            }
+
+            Spacer().frame(height: 24)
 
             Text(message)
-                .font(theme.bodyFont)
-                .foregroundColor(theme.textColor)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(KoraColors.TextPrimary)
+
+            Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black.opacity(0.3))
+        .background(Color.white)
+    }
+}
+
+// MARK: - Backward Compatibility
+
+struct ResultView: View {
+    let verification: Verification
+    let theme: KoraTheme
+    let onDone: () -> Void
+
+    var body: some View {
+        switch verification.status {
+        case .approved:
+            SuccessScreen(verification: verification, onDone: onDone)
+        case .rejected:
+            RejectedScreen(verification: verification, onRetry: onDone)
+        case .expired:
+            ExpiredDocumentScreen(verification: verification, onRetry: onDone)
+        case .reviewRequired:
+            ManualReviewScreen(verification: verification, onDone: onDone)
+        default:
+            SuccessScreen(verification: verification, onDone: onDone)
+        }
     }
 }

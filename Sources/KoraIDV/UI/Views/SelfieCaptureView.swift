@@ -1,195 +1,227 @@
 import SwiftUI
 import AVFoundation
 
-/// Selfie capture view
+/// Selfie capture view - matches mockup screens 7-8
 struct SelfieCaptureView: View {
     let theme: KoraTheme
     let onCapture: (Data) -> Void
     let onCancel: () -> Void
 
     @StateObject private var viewModel = SelfieCaptureViewModel()
+    @State private var showReview = false
+    @State private var capturedImageData: Data?
 
     var body: some View {
+        ZStack {
+            if showReview, let imageData = capturedImageData {
+                selfieReviewView(imageData: imageData)
+            } else {
+                selfieCaptureView
+            }
+        }
+        .onAppear {
+            viewModel.startCapture { imageData in
+                capturedImageData = imageData
+                showReview = true
+            }
+        }
+        .onDisappear {
+            viewModel.stopCapture()
+        }
+    }
+
+    // MARK: - Capture View
+
+    private var selfieCaptureView: some View {
         ZStack {
             // Camera preview
             CameraPreviewView(cameraManager: viewModel.selfieCapture.cameraManager)
                 .ignoresSafeArea()
 
-            // Overlay
-            VStack {
-                // Header
-                headerView
+            Color.black.opacity(0.4)
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                // Progress bar (step 4/5, dark)
+                StepProgressBar(total: 5, current: 4, isDark: true)
+
+                DarkScreenHeader(
+                    title: "Selfie",
+                    onClose: onCancel
+                )
+
+                Spacer().frame(height: 16)
+
+                // Title
+                Text("Face the camera")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(.white)
+
+                Text("Keep a neutral expression")
+                    .font(.system(size: 15))
+                    .foregroundColor(.white.opacity(0.5))
+                    .padding(.top, 4)
+
+                Spacer().frame(height: 24)
+
+                // Oval viewfinder with rotating ring
+                ZStack {
+                    // Rotating ring animation
+                    if viewModel.isFaceDetected {
+                        RotatingRingView()
+                            .frame(width: 250, height: 310)
+                    }
+
+                    // Oval guide
+                    Ellipse()
+                        .stroke(
+                            viewModel.isFaceDetected ? KoraColors.Teal : Color.white.opacity(0.3),
+                            lineWidth: 3
+                        )
+                        .frame(width: 240, height: 300)
+
+                    // Progress ring
+                    if viewModel.isFaceDetected {
+                        Ellipse()
+                            .trim(from: 0, to: CGFloat(viewModel.captureProgress))
+                            .stroke(KoraColors.Teal, lineWidth: 4)
+                            .frame(width: 248, height: 308)
+                            .rotationEffect(.degrees(-90))
+                            .animation(.linear(duration: 0.1), value: viewModel.captureProgress)
+                    }
+                }
+
+                Spacer().frame(height: 24)
+
+                // Guidance pill
+                GuidancePill(
+                    text: viewModel.isFaceDetected ? "Hold still..." : "Detecting face...",
+                    variant: viewModel.isFaceDetected ? .ready : .scanning
+                )
 
                 Spacer()
-
-                // Face guide
-                faceGuideView
-
-                Spacer()
-
-                // Instructions
-                instructionsView
-
-                // Capture button
-                captureButtonView
             }
 
             // Processing overlay
             if viewModel.isProcessing {
-                processingOverlay
-            }
-        }
-        .onAppear {
-            viewModel.startCapture(onCapture: onCapture)
-        }
-        .onDisappear {
-            viewModel.stopCapture()
-        }
-        .koraTheme(theme)
-    }
-
-    private var headerView: some View {
-        HStack {
-            Button {
-                onCancel()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(.white)
-                    .padding(12)
-                    .background(Color.black.opacity(0.3))
-                    .clipShape(Circle())
-            }
-
-            Spacer()
-
-            Text("Take a Selfie")
-                .font(theme.headlineFont)
-                .foregroundColor(.white)
-
-            Spacer()
-
-            Color.clear
-                .frame(width: 44, height: 44)
-        }
-        .padding()
-        .background(
-            LinearGradient(
-                gradient: Gradient(colors: [Color.black.opacity(0.6), Color.clear]),
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
-    }
-
-    private var faceGuideView: some View {
-        GeometryReader { geometry in
-            let size = min(geometry.size.width, geometry.size.height) * 0.7
-
-            ZStack {
-                // Darkened background with oval cutout
-                Color.black.opacity(0.5)
-                    .mask(
-                        Rectangle()
-                            .overlay(
-                                Ellipse()
-                                    .frame(width: size, height: size * 1.3)
-                                    .blendMode(.destinationOut)
-                            )
-                    )
-
-                // Oval guide
-                Ellipse()
-                    .stroke(
-                        viewModel.isFaceDetected ? theme.successColor : Color.white,
-                        lineWidth: 4
-                    )
-                    .frame(width: size, height: size * 1.3)
-
-                // Progress indicator
-                if viewModel.isFaceDetected {
-                    Ellipse()
-                        .trim(from: 0, to: CGFloat(viewModel.captureProgress))
-                        .stroke(theme.successColor, lineWidth: 4)
-                        .frame(width: size + 10, height: size * 1.3 + 10)
-                        .rotationEffect(.degrees(-90))
-                        .animation(.linear(duration: 0.1), value: viewModel.captureProgress)
+                Color.black.opacity(0.7)
+                    .ignoresSafeArea()
+                VStack(spacing: 16) {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .accentColor(.white)
+                    Text("Processing...")
+                        .font(.system(size: 15))
+                        .foregroundColor(.white)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .background(KoraColors.DarkBg)
     }
 
-    private var instructionsView: some View {
-        VStack(spacing: 8) {
-            if let feedback = viewModel.feedbackMessage {
-                Text(feedback)
-                    .font(theme.bodyFont)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.black.opacity(0.6))
-                    .cornerRadius(8)
-            } else if viewModel.isFaceDetected {
-                Text("Great! Hold still...")
-                    .font(theme.bodyFont)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(theme.successColor.opacity(0.8))
-                    .cornerRadius(8)
-            } else {
-                Text("Position your face in the oval")
-                    .font(theme.bodyFont)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.black.opacity(0.6))
-                    .cornerRadius(8)
-            }
-        }
-        .padding(.bottom, 20)
-    }
+    // MARK: - Review View
 
-    private var captureButtonView: some View {
-        Button {
-            viewModel.captureManually()
-        } label: {
-            ZStack {
-                Circle()
-                    .stroke(Color.white, lineWidth: 4)
-                    .frame(width: 72, height: 72)
+    private func selfieReviewView(imageData: Data) -> some View {
+        VStack(spacing: 0) {
+            StepProgressBar(total: 5, current: 4, isDark: true)
 
-                Circle()
-                    .fill(Color.white)
-                    .frame(width: 60, height: 60)
-            }
-        }
-        .padding(.bottom, 40)
-        .background(
-            LinearGradient(
-                gradient: Gradient(colors: [Color.clear, Color.black.opacity(0.6)]),
-                startPoint: .top,
-                endPoint: .bottom
+            DarkScreenHeader(
+                title: "Review",
+                onClose: onCancel
             )
-        )
-    }
 
-    private var processingOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.7)
-                .ignoresSafeArea()
+            Spacer().frame(height: 16)
 
-            VStack(spacing: 16) {
-                ProgressView()
-                    .scaleEffect(1.5)
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+            Text("Does this look like you?")
+                .font(.system(size: 24, weight: .bold))
+                .foregroundColor(.white)
 
-                Text("Processing...")
-                    .font(theme.bodyFont)
-                    .foregroundColor(.white)
+            Text("Check clarity and lighting")
+                .font(.system(size: 15))
+                .foregroundColor(.white.opacity(0.5))
+                .padding(.top, 4)
+
+            Spacer().frame(height: 24)
+
+            // Oval with captured image
+            ZStack {
+                if let uiImage = UIImage(data: imageData) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 240, height: 300)
+                        .clipShape(Ellipse())
+                }
+
+                Ellipse()
+                    .stroke(KoraColors.Teal, lineWidth: 3)
+                    .frame(width: 240, height: 300)
             }
+
+            Spacer().frame(height: 12)
+
+            ReviewBadge(text: "Face detected")
+
+            Spacer().frame(height: 16)
+
+            // Quality checks
+            HStack(spacing: 20) {
+                ReviewQualityCheck(label: "Clear")
+                ReviewQualityCheck(label: "Centered")
+                ReviewQualityCheck(label: "Well-lit")
+            }
+
+            Spacer()
+
+            // Buttons
+            HStack(spacing: 12) {
+                KoraButton(
+                    text: "Retake",
+                    action: {
+                        showReview = false
+                        capturedImageData = nil
+                    },
+                    variant: .darkOutline
+                )
+                .frame(maxWidth: .infinity)
+
+                KoraButton(
+                    text: "Use this",
+                    action: { onCapture(imageData) }
+                )
+                .frame(maxWidth: .infinity)
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 40)
         }
+        .background(KoraColors.DarkBg)
+    }
+}
+
+// MARK: - Rotating Ring
+
+private struct RotatingRingView: View {
+    @State private var rotation: Double = 0
+
+    var body: some View {
+        Ellipse()
+            .stroke(
+                AngularGradient(
+                    gradient: Gradient(colors: [
+                        KoraColors.Teal.opacity(0),
+                        KoraColors.Teal.opacity(0.5),
+                        KoraColors.Teal.opacity(0)
+                    ]),
+                    center: .center
+                ),
+                lineWidth: 4
+            )
+            .rotationEffect(.degrees(rotation))
+            .onAppear {
+                withAnimation(.linear(duration: 3).repeatForever(autoreverses: false)) {
+                    rotation = 360
+                }
+            }
     }
 }
 
@@ -203,12 +235,6 @@ class SelfieCaptureViewModel: ObservableObject {
 
     let selfieCapture = SelfieCapture()
     private var onCapture: ((Data) -> Void)?
-
-    private var cameraManager: CameraManager {
-        // Access the internal camera manager through a computed property
-        // In production, this would need proper encapsulation
-        return CameraManager()
-    }
 
     func startCapture(onCapture: @escaping (Data) -> Void) {
         self.onCapture = onCapture
@@ -269,4 +295,3 @@ extension SelfieCaptureViewModel: SelfieCaptureDelegate {
         }
     }
 }
-

@@ -1,144 +1,149 @@
 import SwiftUI
 
-/// Consent screen view
+/// Consent screen view - matches mockup screen 1
 struct ConsentView: View {
     let configuration: Configuration
     let onAccept: () -> Void
     let onDecline: () -> Void
 
-    @Environment(\.koraTheme) private var theme
-
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            headerSection
+            // Progress bar (step 1/5)
+            StepProgressBar(total: 5, current: 1)
 
-            // Content
+            // Close button header
+            HStack {
+                LightCloseButton(action: onDecline)
+                Spacer()
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 16)
+
+            // Scrollable body
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    introSection
-                    dataCollectionSection
-                    privacySection
+                VStack(alignment: .leading, spacing: 0) {
+                    // Teal gradient icon
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(
+                                LinearGradient(
+                                    colors: [KoraColors.Teal, KoraColors.Cyan],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 72, height: 72)
+
+                        Image(systemName: "checkmark.shield.fill")
+                            .font(.system(size: 32))
+                            .foregroundColor(.white)
+                    }
+
+                    Spacer().frame(height: 24)
+
+                    // Title
+                    Text("Verify your identity")
+                        .font(.system(size: 26, weight: .bold))
+                        .tracking(-0.5)
+                        .foregroundColor(KoraColors.TextPrimary)
+
+                    Spacer().frame(height: 8)
+
+                    // Description
+                    Text("We need to verify your identity to comply with regulations and keep your account secure.")
+                        .font(.system(size: 15))
+                        .foregroundColor(KoraColors.TextTertiary)
+                        .lineSpacing(4)
+
+                    Spacer().frame(height: 28)
+
+                    // Consent items
+                    VStack(spacing: 16) {
+                        ConsentItem(
+                            iconName: "creditcard.fill",
+                            iconBg: KoraColors.InfoBlueLight,
+                            iconTint: KoraColors.InfoBlue,
+                            title: "Government-issued ID",
+                            subtitle: "Photo of your passport or front & back of your ID"
+                        )
+                        ConsentItem(
+                            iconName: "person.fill",
+                            iconBg: KoraColors.SuccessGreenLight,
+                            iconTint: KoraColors.SuccessGreen,
+                            title: "Selfie photo",
+                            subtitle: "A quick selfie to match your ID"
+                        )
+                        ConsentItem(
+                            iconName: "eye.fill",
+                            iconBg: KoraColors.PurpleLight,
+                            iconTint: KoraColors.Purple,
+                            title: "Liveness check",
+                            subtitle: "Quick video to confirm it's really you"
+                        )
+                    }
                 }
-                .padding(theme.padding)
+                .padding(.horizontal, 24)
             }
 
-            // Footer with buttons
-            footerSection
+            // Bottom action area
+            VStack(spacing: 12) {
+                KoraButton(
+                    text: "Get started",
+                    action: onAccept,
+                    trailingIcon: {
+                        AnyView(
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.white)
+                        )
+                    }
+                )
+
+                Text("By continuing, you agree to our Privacy Policy and consent to biometric processing.")
+                    .font(.system(size: 12))
+                    .foregroundColor(KoraColors.TextMuted)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(2)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 16)
+            .padding(.bottom, 40)
         }
-        .background(theme.backgroundColor)
+        .background(Color.white)
     }
+}
 
-    private var headerSection: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "checkmark.shield.fill")
-                .font(.system(size: 48))
-                .foregroundColor(theme.primaryColor)
+// MARK: - Consent Item
 
-            Text("Identity Verification")
-                .font(theme.titleFont)
-                .foregroundColor(theme.textColor)
+private struct ConsentItem: View {
+    let iconName: String
+    let iconBg: Color
+    let iconTint: Color
+    let title: String
+    let subtitle: String
 
-            Text("We need to verify your identity to continue")
-                .font(theme.bodyFont)
-                .foregroundColor(theme.secondaryTextColor)
-                .multilineTextAlignment(.center)
-        }
-        .padding(.vertical, 32)
-        .frame(maxWidth: .infinity)
-        .background(theme.surfaceColor)
-    }
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: iconName)
+                .font(.system(size: 16))
+                .foregroundColor(iconTint)
+                .frame(width: 40, height: 40)
+                .background(iconBg)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
 
-    private var introSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("What you'll need")
-                .font(theme.headlineFont)
-                .foregroundColor(theme.textColor)
-
-            VStack(alignment: .leading, spacing: 8) {
-                checklistItem(icon: "doc.text.fill", text: "A valid government-issued ID")
-                checklistItem(icon: "camera.fill", text: "A device with a camera")
-                checklistItem(icon: "lightbulb.fill", text: "Good lighting conditions")
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(KoraColors.TextPrimary)
+                Text(subtitle)
+                    .font(.system(size: 13))
+                    .foregroundColor(KoraColors.TextSecondary)
+                    .lineSpacing(2)
             }
         }
-    }
-
-    private var dataCollectionSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Information we collect")
-                .font(theme.headlineFont)
-                .foregroundColor(theme.textColor)
-
-            VStack(alignment: .leading, spacing: 8) {
-                bulletItem("Photos of your identity document")
-                bulletItem("A selfie for face matching")
-                bulletItem("Liveness check to confirm you're a real person")
-            }
-        }
-    }
-
-    private var privacySection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Your privacy")
-                .font(theme.headlineFont)
-                .foregroundColor(theme.textColor)
-
-            Text("Your data is encrypted and stored securely. We only use your information for identity verification purposes and in accordance with our privacy policy.")
-                .font(theme.bodyFont)
-                .foregroundColor(theme.secondaryTextColor)
-        }
-    }
-
-    private var footerSection: some View {
-        VStack(spacing: 12) {
-            Button {
-                onAccept()
-            } label: {
-                Text("Accept & Continue")
-                    .font(theme.bodyFont.weight(Font.Weight.semibold))
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(theme.primaryColor)
-                    .cornerRadius(theme.cornerRadius)
-            }
-
-            Button {
-                onDecline()
-            } label: {
-                Text("Decline")
-                    .font(theme.bodyFont)
-                    .foregroundColor(theme.secondaryTextColor)
-            }
-            .padding(.bottom, 8)
-        }
-        .padding(theme.padding)
-        .background(theme.backgroundColor)
-    }
-
-    private func checklistItem(icon: String, text: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 20))
-                .foregroundColor(theme.primaryColor)
-                .frame(width: 32)
-
-            Text(text)
-                .font(theme.bodyFont)
-                .foregroundColor(theme.textColor)
-        }
-    }
-
-    private func bulletItem(_ text: String) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Circle()
-                .fill(theme.primaryColor)
-                .frame(width: 6, height: 6)
-                .padding(.top, 6)
-
-            Text(text)
-                .font(theme.bodyFont)
-                .foregroundColor(theme.secondaryTextColor)
-        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(KoraColors.Surface)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 }

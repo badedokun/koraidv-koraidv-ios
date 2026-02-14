@@ -16,6 +16,7 @@ final class VerificationFlowController {
     private weak var presentingViewController: UIViewController?
 
     private var currentStep: VerificationStep = .consent
+    private var selectedCountry: CountryInfo?
     private var selectedDocumentType: DocumentType?
     private var documentFrontCaptured = false
     private var documentBackCaptured = false
@@ -47,7 +48,7 @@ final class VerificationFlowController {
         let consentView = ConsentView(
             configuration: configuration,
             onAccept: { [weak self] in
-                self?.proceedToDocumentSelection()
+                self?.proceedToCountrySelection()
             },
             onDecline: { [weak self] in
                 self?.cancel()
@@ -82,11 +83,35 @@ final class VerificationFlowController {
 
     // MARK: - Step Navigation
 
-    private func proceedToDocumentSelection() {
+    private func proceedToCountrySelection() {
+        currentStep = .countrySelection
+
+        let countries = CountrySelectionView.defaultCountries
+
+        let countryView = CountrySelectionView(
+            countries: countries,
+            onSelect: { [weak self] (country: CountryInfo) in
+                self?.selectedCountry = country
+                self?.proceedToDocumentSelection(country: country)
+            },
+            onCancel: { [weak self] in
+                self?.cancel()
+            }
+        )
+
+        pushView(countryView)
+    }
+
+    private func proceedToDocumentSelection(country: CountryInfo) {
         currentStep = .documentSelection
 
+        let allowedTypes = country.documentTypes.filter { type in
+            configuration.documentTypes.contains(type)
+        }
+
         let selectionView = DocumentSelectionView(
-            allowedTypes: configuration.documentTypes,
+            allowedTypes: allowedTypes.isEmpty ? configuration.documentTypes : allowedTypes,
+            selectedCountry: country,
             onSelect: { [weak self] (documentType: DocumentType) in
                 self?.selectedDocumentType = documentType
                 self?.proceedToDocumentCapture()
@@ -283,12 +308,16 @@ final class VerificationFlowController {
     private func completeVerification() {
         currentStep = .completing
 
-        showLoading(message: "Completing verification...")
+        // Show processing screen
+        let processingView = ProcessingScreen(steps: [
+            ProcessingStepItem(label: "Document analyzed", status: .done),
+            ProcessingStepItem(label: "Checking face match", status: .active),
+            ProcessingStepItem(label: "Finalizing results", status: .pending),
+        ])
+        pushView(processingView)
 
         sessionManager.completeVerification(verificationId: verification.id) { [weak self] result in
             DispatchQueue.main.async {
-                self?.hideLoading()
-
                 switch result {
                 case .success(let verification):
                     self?.showResult(verification: verification)
@@ -303,15 +332,54 @@ final class VerificationFlowController {
     private func showResult(verification: Verification) {
         currentStep = .result
 
-        let resultView = ResultView(
-            verification: verification,
-            theme: configuration.theme,
-            onDone: { [weak self] in
-                self?.finish(with: .success(verification))
-            }
-        )
+        // Route to appropriate result screen based on status
+        switch verification.status {
+        case .approved:
+            let view = SuccessScreen(
+                verification: verification,
+                onDone: { [weak self] in
+                    self?.finish(with: .success(verification))
+                }
+            )
+            pushView(view)
 
-        pushView(resultView)
+        case .rejected:
+            let view = RejectedScreen(
+                verification: verification,
+                onRetry: { [weak self] in
+                    self?.finish(with: .failure(.unknown("Verification rejected")))
+                }
+            )
+            pushView(view)
+
+        case .expired:
+            let view = ExpiredDocumentScreen(
+                verification: verification,
+                onRetry: { [weak self] in
+                    self?.finish(with: .failure(.verificationExpired))
+                }
+            )
+            pushView(view)
+
+        case .reviewRequired:
+            let view = ManualReviewScreen(
+                verification: verification,
+                onDone: { [weak self] in
+                    self?.finish(with: .success(verification))
+                }
+            )
+            pushView(view)
+
+        default:
+            let view = ResultView(
+                verification: verification,
+                theme: self.configuration.theme,
+                onDone: { [weak self] in
+                    self?.finish(with: .success(verification))
+                }
+            )
+            pushView(view)
+        }
     }
 
     // MARK: - Utilities
@@ -322,7 +390,6 @@ final class VerificationFlowController {
     }
 
     private func showLoading(message: String) {
-        // Loading overlay implementation
         let loadingView = LoadingView(message: message)
         let hostingController = UIHostingController(rootView: loadingView)
         hostingController.modalPresentationStyle = UIModalPresentationStyle.overFullScreen
@@ -381,7 +448,7 @@ final class VerificationFlowController {
         case .pending:
             return .consent
         case .documentRequired:
-            return .documentSelection
+            return .countrySelection
         case .selfieRequired:
             return .selfie
         case .livenessRequired:
@@ -399,15 +466,15 @@ final class VerificationFlowController {
         case .consent:
             ConsentView(
                 configuration: configuration,
-                onAccept: { [weak self] in self?.proceedToDocumentSelection() },
+                onAccept: { [weak self] in self?.proceedToCountrySelection() },
                 onDecline: { [weak self] in self?.cancel() }
             )
-        case .documentSelection:
-            DocumentSelectionView(
-                allowedTypes: configuration.documentTypes,
-                onSelect: { [weak self] type in
-                    self?.selectedDocumentType = type
-                    self?.proceedToDocumentCapture()
+        case .countrySelection:
+            CountrySelectionView(
+                countries: CountrySelectionView.defaultCountries,
+                onSelect: { [weak self] country in
+                    self?.selectedCountry = country
+                    self?.proceedToDocumentSelection(country: country)
                 },
                 onCancel: { [weak self] in self?.cancel() }
             )
@@ -421,6 +488,7 @@ final class VerificationFlowController {
 
 private enum VerificationStep {
     case consent
+    case countrySelection
     case documentSelection
     case documentFront
     case documentBack
