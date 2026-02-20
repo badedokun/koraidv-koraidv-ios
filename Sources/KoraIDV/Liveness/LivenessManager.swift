@@ -40,7 +40,7 @@ final class LivenessManager: NSObject {
     /// Serial queue to protect mutable state from data races
     private let stateQueue = DispatchQueue(label: "com.koraidv.liveness.state")
 
-    private var session: LivenessSession?
+    private var _session: LivenessSession?
     private var _currentChallengeIndex = 0
     private var _challengeResults: [ChallengeResultItem] = []
     private var _isProcessing = false
@@ -67,20 +67,28 @@ final class LivenessManager: NSObject {
         stateQueue.sync { _challengeResults }
     }
 
+    /// Thread-safe access to session
+    private var session: LivenessSession? {
+        get { stateQueue.sync { _session } }
+        set { stateQueue.sync { _session = newValue } }
+    }
+
     /// Current challenge being processed
     var currentChallenge: LivenessChallenge? {
-        guard let session = session else { return nil }
-        let index = currentChallengeIndex
-        guard index < session.challenges.count else { return nil }
-        return session.challenges[index]
+        return stateQueue.sync {
+            guard let session = _session else { return nil }
+            let index = _currentChallengeIndex
+            guard index < session.challenges.count else { return nil }
+            return session.challenges[index]
+        }
     }
 
     // MARK: - Public Methods
 
     /// Start liveness session
     func start(session: LivenessSession, completion: @escaping (Result<Void, KoraError>) -> Void) {
-        self.session = session
         stateQueue.sync {
+            _session = session
             _currentChallengeIndex = 0
             _challengeResults = []
             _isProcessing = false
@@ -106,7 +114,7 @@ final class LivenessManager: NSObject {
     func stop() {
         cameraManager.stop()
         challengeDetector.reset()
-        session = nil
+        stateQueue.sync { _session = nil }
     }
 
     /// Get preview layer

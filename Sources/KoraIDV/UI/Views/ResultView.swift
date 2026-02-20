@@ -596,7 +596,9 @@ struct ResultView: View {
         case .reviewRequired:
             ManualReviewScreen(verification: verification, onDone: onDone)
         default:
-            SuccessScreen(verification: verification, onDone: onDone)
+            ProcessingScreen(steps: [
+                ProcessingStepItem(label: "Processing verification", status: .active),
+            ])
         }
     }
 }

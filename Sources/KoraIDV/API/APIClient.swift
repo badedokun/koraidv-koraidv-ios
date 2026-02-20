@@ -214,11 +214,14 @@ final class APIClient {
         }
 
         let task = session.dataTask(with: request) { [weak self] data, response, error in
-            guard let self = self else { return }
+            guard let self = self else {
+                completion(.failure(.unknown("Request cancelled")))
+                return
+            }
 
             // Handle network error
             if let error = error {
-                if self.shouldRetry(attempt: attempt, error: error) {
+                if self.shouldRetry(attempt: attempt, method: request.httpMethod, error: error) {
                     self.retryAfterDelay(request: request, attempt: attempt, completion: completion)
                     return
                 }
@@ -237,10 +240,7 @@ final class APIClient {
             }
 
             if self.configuration.debugLogging {
-                KoraIDV.log("Response: \(httpResponse.statusCode)")
-                if let json = String(data: data, encoding: .utf8) {
-                    KoraIDV.log("Body: \(json.prefix(500))")
-                }
+                KoraIDV.log("Response: \(httpResponse.statusCode) (\(data.count) bytes)")
             }
 
             // Handle HTTP status codes
@@ -266,7 +266,7 @@ final class APIClient {
                 self.handleValidationError(data: data, completion: completion)
 
             case 429:
-                if self.shouldRetry(attempt: attempt, error: nil) {
+                if self.shouldRetry(attempt: attempt, method: request.httpMethod, error: nil) {
                     let retryAfter = httpResponse.value(forHTTPHeaderField: "Retry-After")
                     let delay = Double(retryAfter ?? "") ?? self.calculateDelay(attempt: attempt)
                     self.retryAfterDelay(request: request, attempt: attempt, delay: delay, completion: completion)
@@ -275,7 +275,7 @@ final class APIClient {
                 completion(.failure(.rateLimited))
 
             case 500...599:
-                if self.shouldRetry(attempt: attempt, error: nil) {
+                if self.shouldRetry(attempt: attempt, method: request.httpMethod, error: nil) {
                     self.retryAfterDelay(request: request, attempt: attempt, completion: completion)
                     return
                 }
@@ -289,19 +289,23 @@ final class APIClient {
         task.resume()
     }
 
-    private func shouldRetry(attempt: Int, error: Error?) -> Bool {
+    private func shouldRetry(attempt: Int, method: String?, error: Error?) -> Bool {
         guard attempt < maxRetries else { return false }
+
+        // Only retry idempotent methods (GET, PUT, DELETE) for server errors.
+        // POST is not idempotent — retrying could create duplicate resources.
+        let isIdempotent = method != "POST"
 
         if let urlError = error as? URLError {
             switch urlError.code {
             case .timedOut, .networkConnectionLost, .notConnectedToInternet:
-                return true
+                return true // Network errors are safe to retry for all methods
             default:
                 return false
             }
         }
 
-        return true // Retry for server errors and rate limits
+        return isIdempotent // Only retry server errors for idempotent methods
     }
 
     private func calculateDelay(attempt: Int) -> TimeInterval {

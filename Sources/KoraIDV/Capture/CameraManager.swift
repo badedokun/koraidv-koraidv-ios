@@ -145,6 +145,8 @@ final class CameraManager: NSObject {
 
         do {
             try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+
             device.focusPointOfInterest = point
             device.focusMode = .autoFocus
 
@@ -152,10 +154,8 @@ final class CameraManager: NSObject {
                 device.exposurePointOfInterest = point
                 device.exposureMode = .autoExpose
             }
-
-            device.unlockForConfiguration()
         } catch {
-            // Focus failed, not critical
+            KoraIDV.log("Focus configuration failed: \(error)")
         }
     }
 
@@ -167,10 +167,11 @@ final class CameraManager: NSObject {
 
         do {
             try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+
             device.videoZoomFactor = clampedFactor
-            device.unlockForConfiguration()
         } catch {
-            // Zoom failed, not critical
+            KoraIDV.log("Zoom configuration failed: \(error)")
         }
     }
 

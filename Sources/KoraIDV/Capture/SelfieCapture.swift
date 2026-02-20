@@ -55,9 +55,13 @@ final class SelfieCapture: NSObject {
     /// Start selfie capture
     func start(completion: @escaping (Result<Void, KoraError>) -> Void) {
         cameraManager.configure(position: .front) { [weak self] result in
+            guard let self = self else {
+                completion(.failure(.unknown("Selfie capture was released")))
+                return
+            }
             switch result {
             case .success:
-                self?.cameraManager.start()
+                self.cameraManager.start()
                 completion(.success(()))
             case .failure(let error):
                 completion(.failure(error))

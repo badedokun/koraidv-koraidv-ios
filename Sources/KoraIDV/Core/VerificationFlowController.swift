@@ -174,6 +174,8 @@ final class VerificationFlowController {
                         }
                     } else if let issues = response.qualityIssues, !issues.isEmpty {
                         self?.showQualityError(issues: issues, side: side)
+                    } else {
+                        self?.showError(.unknown("Document processing failed. Please try again."))
                     }
 
                 case .failure(let error):
@@ -239,6 +241,8 @@ final class VerificationFlowController {
                         }
                     } else if let issues = response.qualityIssues, !issues.isEmpty {
                         self?.showSelfieQualityError(issues: issues)
+                    } else {
+                        self?.showError(.unknown("Selfie processing failed. Please try again."))
                     }
 
                 case .failure(let error):
@@ -483,8 +487,36 @@ final class VerificationFlowController {
                 },
                 onCancel: { [weak self] in self?.cancel() }
             )
+        case .selfie:
+            SelfieCaptureView(
+                theme: configuration.theme,
+                onCapture: { [weak self] imageData in
+                    self?.handleSelfieCapture(imageData: imageData)
+                },
+                onCancel: { [weak self] in self?.cancel() }
+            )
+        case .liveness:
+            // Liveness requires a session; start by creating one
+            ProcessingScreen(steps: [
+                ProcessingStepItem(label: "Setting up liveness check", status: .active),
+            ])
+        case .result:
+            ResultView(
+                verification: verification,
+                theme: configuration.theme,
+                onDone: { [weak self] in
+                    guard let self = self else { return }
+                    self.finish(with: .success(self.verification))
+                }
+            )
         default:
-            EmptyView()
+            // For document steps, restart from country selection since we need
+            // the user to re-select document type for the capture flow
+            ConsentView(
+                configuration: configuration,
+                onAccept: { [weak self] in self?.proceedToCountrySelection() },
+                onDecline: { [weak self] in self?.cancel() }
+            )
         }
     }
 }
