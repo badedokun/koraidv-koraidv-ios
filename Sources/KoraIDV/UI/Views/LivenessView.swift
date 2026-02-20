@@ -31,6 +31,8 @@ struct LivenessView: View {
             // Camera preview
             LivenessCameraPreviewView(livenessManager: viewModel.livenessManager)
                 .ignoresSafeArea()
+                .accessibilityLabel("Front camera for liveness check")
+                .accessibilityAddTraits(.isImage)
 
             Color.black.opacity(0.4)
                 .ignoresSafeArea()
@@ -40,7 +42,7 @@ struct LivenessView: View {
                 StepProgressBar(total: 5, current: 5, isDark: true)
 
                 DarkScreenHeader(
-                    title: "Liveness Check",
+                    title: L10n.tr("koraidv.liveness.title"),
                     onClose: onCancel
                 )
 
@@ -53,8 +55,9 @@ struct LivenessView: View {
                         .foregroundColor(.white)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
+                        .accessibilityAddTraits(.isHeader)
                 } else {
-                    Text("Preparing...")
+                    Text(L10n.tr("koraidv.liveness.preparing"))
                         .font(.system(size: 24, weight: .bold))
                         .foregroundColor(.white)
                 }
@@ -75,11 +78,14 @@ struct LivenessView: View {
                         .frame(width: 248, height: 308)
                         .rotationEffect(.degrees(-90))
                         .animation(.linear(duration: 0.1), value: viewModel.challengeProgress)
+                        .accessibilityLabel("Challenge progress")
+                        .accessibilityValue("\(Int(viewModel.challengeProgress * 100)) percent")
 
                     // Countdown badge
                     if viewModel.countdown > 0 {
                         CountdownBadge(count: viewModel.countdown)
                             .offset(y: -130)
+                            .accessibilityLabel("Starting in \(viewModel.countdown)")
                     }
                 }
 
@@ -90,11 +96,12 @@ struct LivenessView: View {
                     total: session.challenges.count,
                     currentIndex: viewModel.completedChallenges
                 )
+                .accessibilityLabel("Challenge \(viewModel.completedChallenges + 1) of \(session.challenges.count)")
 
                 Spacer().frame(height: 12)
 
                 // Challenge info text
-                Text("Challenge \(viewModel.completedChallenges + 1) of \(session.challenges.count)")
+                Text(L10n.tr("koraidv.liveness.challenge_of", viewModel.completedChallenges + 1, session.challenges.count))
                     .font(.system(size: 14))
                     .foregroundColor(.white.opacity(0.6))
 

@@ -35,6 +35,7 @@ final class LivenessManager: NSObject {
     private let cameraManager = CameraManager()
     private let faceDetector = FaceDetector()
     private let challengeDetector = ChallengeDetector()
+    private let antiSpoofCheck = AntiSpoofCheck()
     private let ciContext = CIContext()
 
     /// Serial queue to protect mutable state from data races
@@ -44,6 +45,8 @@ final class LivenessManager: NSObject {
     private var _currentChallengeIndex = 0
     private var _challengeResults: [ChallengeResultItem] = []
     private var _isProcessing = false
+    private var _frameCount = 0
+    private let maxFramesPerChallenge = 30
 
     /// Thread-safe access to currentChallengeIndex
     private var currentChallengeIndex: Int {
@@ -55,6 +58,12 @@ final class LivenessManager: NSObject {
     private var isProcessing: Bool {
         get { stateQueue.sync { _isProcessing } }
         set { stateQueue.sync { _isProcessing = newValue } }
+    }
+
+    /// Thread-safe access to frameCount
+    private var frameCount: Int {
+        get { stateQueue.sync { _frameCount } }
+        set { stateQueue.sync { _frameCount = newValue } }
     }
 
     /// Thread-safe append to challengeResults
@@ -92,6 +101,7 @@ final class LivenessManager: NSObject {
             _currentChallengeIndex = 0
             _challengeResults = []
             _isProcessing = false
+            _frameCount = 0
         }
 
         // Configure face detector for liveness
@@ -147,6 +157,7 @@ final class LivenessManager: NSObject {
         }
 
         challengeDetector.reset()
+        stateQueue.sync { _frameCount = 0 }
         challengeDetector.startDetecting(challengeType: challenge.type)
 
         delegate?.livenessManager(self, didStartChallenge: challenge)
@@ -175,6 +186,13 @@ final class LivenessManager: NSObject {
 
     private func processFrame(_ sampleBuffer: CMSampleBuffer) {
         guard !isProcessing, let challenge = currentChallenge else { return }
+
+        // Enforce per-challenge frame budget
+        guard frameCount < maxFramesPerChallenge else {
+            recordChallengeResult(challenge: challenge, passed: false, confidence: 0, imageData: nil)
+            return
+        }
+        frameCount += 1
         isProcessing = true
 
         faceDetector.detectFaces(in: sampleBuffer) { [weak self] result in
@@ -218,6 +236,14 @@ final class LivenessManager: NSObject {
         }
 
         let image = UIImage(cgImage: cgImage)
+
+        // Run anti-spoof check on captured frame
+        let spoofResult = antiSpoofCheck.analyze(image)
+        if !spoofResult.isLikelyReal {
+            recordChallengeResult(challenge: challenge, passed: false, confidence: 0, imageData: nil)
+            return
+        }
+
         let imageData = image.jpegData(compressionQuality: 0.8)
 
         recordChallengeResult(

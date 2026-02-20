@@ -34,17 +34,18 @@ struct CountrySelectionView: View {
             // Header
             HStack(spacing: 12) {
                 LightBackButton(action: onCancel)
-                Text("Select your country")
+                Text(L10n.tr("koraidv.country.title"))
                     .font(.system(size: 18, weight: .semibold))
                     .tracking(-0.3)
                     .foregroundColor(KoraColors.TextPrimary)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 12)
 
             // Subtitle
-            Text("Where was your document issued?")
+            Text(L10n.tr("koraidv.country.subtitle"))
                 .font(.system(size: 14))
                 .foregroundColor(KoraColors.TextSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -75,6 +76,8 @@ struct CountrySelectionView: View {
                 )
                 .padding(.horizontal, 24)
                 .padding(.bottom, 16)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(selected.name), selected")
             }
 
             // Search bar
@@ -82,8 +85,9 @@ struct CountrySelectionView: View {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 14))
                     .foregroundColor(Color(hex: "#AAAAAA"))
-                TextField("Search countries...", text: $searchQuery)
+                TextField(L10n.tr("koraidv.country.search"), text: $searchQuery)
                     .font(.system(size: 15))
+                    .accessibilityLabel("Search countries")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 12)
@@ -131,6 +135,8 @@ struct CountrySelectionView: View {
                             )
                         }
                         .buttonStyle(PlainButtonStyle())
+                        .accessibilityLabel(country.name)
+                        .accessibilityValue(isSelected ? "Selected" : "")
                     }
                 }
                 .padding(.horizontal, 24)
@@ -139,10 +145,11 @@ struct CountrySelectionView: View {
             // Continue button
             VStack {
                 KoraButton(
-                    text: "Continue",
+                    text: L10n.tr("koraidv.country.continue"),
                     action: { if let c = selectedCountry { onSelect(c) } },
                     enabled: selectedCountry != nil
                 )
+                .accessibilityHint("Double tap to continue with selected country")
             }
             .padding(.horizontal, 24)
             .padding(.top, 16)

@@ -15,10 +15,11 @@ struct DocumentSelectionView: View {
             // Header with back button
             HStack(spacing: 12) {
                 LightBackButton(action: onCancel)
-                Text("Choose your document")
+                Text(L10n.tr("koraidv.document.title"))
                     .font(.system(size: 18, weight: .semibold))
                     .tracking(-0.3)
                     .foregroundColor(KoraColors.TextPrimary)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
             }
             .padding(.horizontal, 24)
@@ -73,7 +74,7 @@ private struct DocumentCard: View {
                     Text(docType.displayName)
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(KoraColors.TextPrimary)
-                    Text(docType.requiresBack ? "Front & back required" : "Photo page only")
+                    Text(docType.requiresBack ? L10n.tr("koraidv.document.front_back") : L10n.tr("koraidv.document.photo_page"))
                         .font(.system(size: 13))
                         .foregroundColor(KoraColors.TextSecondary)
                 }
@@ -84,6 +85,7 @@ private struct DocumentCard: View {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(Color(hex: "#CCCCCC"))
+                    .accessibilityHidden(true)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 18)
@@ -91,6 +93,8 @@ private struct DocumentCard: View {
             .clipShape(RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityLabel("\(docType.displayName). \(docType.requiresBack ? L10n.tr("koraidv.document.front_back") : L10n.tr("koraidv.document.photo_page"))")
+        .accessibilityHint("Double tap to select")
     }
 
     private var iconName: String {

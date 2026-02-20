@@ -38,19 +38,21 @@ struct ConsentView: View {
                             .font(.system(size: 32))
                             .foregroundColor(.white)
                     }
+                    .accessibilityHidden(true)
 
                     Spacer().frame(height: 24)
 
                     // Title
-                    Text("Verify your identity")
+                    Text(L10n.tr("koraidv.consent.title"))
                         .font(.system(size: 26, weight: .bold))
                         .tracking(-0.5)
                         .foregroundColor(KoraColors.TextPrimary)
+                        .accessibilityAddTraits(.isHeader)
 
                     Spacer().frame(height: 8)
 
                     // Description
-                    Text("We need to verify your identity to comply with regulations and keep your account secure.")
+                    Text(L10n.tr("koraidv.consent.description"))
                         .font(.system(size: 15))
                         .foregroundColor(KoraColors.TextTertiary)
                         .lineSpacing(4)
@@ -63,22 +65,22 @@ struct ConsentView: View {
                             iconName: "creditcard.fill",
                             iconBg: KoraColors.InfoBlueLight,
                             iconTint: KoraColors.InfoBlue,
-                            title: "Government-issued ID",
-                            subtitle: "Photo of your passport or front & back of your ID"
+                            title: L10n.tr("koraidv.consent.item.id.title"),
+                            subtitle: L10n.tr("koraidv.consent.item.id.subtitle")
                         )
                         ConsentItem(
                             iconName: "person.fill",
                             iconBg: KoraColors.SuccessGreenLight,
                             iconTint: KoraColors.SuccessGreen,
-                            title: "Selfie photo",
-                            subtitle: "A quick selfie to match your ID"
+                            title: L10n.tr("koraidv.consent.item.selfie.title"),
+                            subtitle: L10n.tr("koraidv.consent.item.selfie.subtitle")
                         )
                         ConsentItem(
                             iconName: "eye.fill",
                             iconBg: KoraColors.PurpleLight,
                             iconTint: KoraColors.Purple,
-                            title: "Liveness check",
-                            subtitle: "Quick video to confirm it's really you"
+                            title: L10n.tr("koraidv.consent.item.liveness.title"),
+                            subtitle: L10n.tr("koraidv.consent.item.liveness.subtitle")
                         )
                     }
                 }
@@ -88,7 +90,7 @@ struct ConsentView: View {
             // Bottom action area
             VStack(spacing: 12) {
                 KoraButton(
-                    text: "Get started",
+                    text: L10n.tr("koraidv.consent.button"),
                     action: onAccept,
                     trailingIcon: {
                         AnyView(
@@ -98,8 +100,9 @@ struct ConsentView: View {
                         )
                     }
                 )
+                .accessibilityHint("Double tap to begin verification")
 
-                Text("By continuing, you agree to our Privacy Policy and consent to biometric processing.")
+                Text(L10n.tr("koraidv.consent.privacy"))
                     .font(.system(size: 12))
                     .foregroundColor(KoraColors.TextMuted)
                     .multilineTextAlignment(.center)
@@ -145,5 +148,6 @@ private struct ConsentItem: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(KoraColors.Surface)
         .clipShape(RoundedRectangle(cornerRadius: 14))
+        .accessibilityElement(children: .combine)
     }
 }

@@ -41,6 +41,7 @@ struct ProcessingScreen: View {
                     .font(.system(size: 24))
                     .foregroundColor(KoraColors.Teal)
             }
+            .accessibilityHidden(true)
             .onAppear {
                 withAnimation(.linear(duration: 1).repeatForever(autoreverses: false)) {
                     outerRotation = 360
@@ -55,11 +56,12 @@ struct ProcessingScreen: View {
 
             Spacer().frame(height: 32)
 
-            Text("Verifying your identity")
+            Text(L10n.tr("koraidv.result.processing.title"))
                 .font(.system(size: 20, weight: .bold))
                 .foregroundColor(.white)
+                .accessibilityAddTraits(.isHeader)
 
-            Text("This may take a few moments")
+            Text(L10n.tr("koraidv.result.processing.subtitle"))
                 .font(.system(size: 14))
                 .foregroundColor(.white.opacity(0.5))
                 .padding(.top, 4)
@@ -130,14 +132,16 @@ struct SuccessScreen: View {
                     iconColor: .white,
                     outerRingColor: KoraColors.SuccessGreenBorder
                 )
+                .accessibilityHidden(true)
 
                 Spacer().frame(height: 20)
 
-                Text("Verification approved")
+                Text(L10n.tr("koraidv.result.approved.title"))
                     .font(.system(size: 22, weight: .bold))
                     .foregroundColor(KoraColors.TextPrimary)
+                    .accessibilityAddTraits(.isHeader)
 
-                Text("Your identity has been successfully verified")
+                Text(L10n.tr("koraidv.result.approved.subtitle"))
                     .font(.system(size: 14))
                     .foregroundColor(KoraColors.TextSecondary)
                     .padding(.top, 4)
@@ -147,9 +151,10 @@ struct SuccessScreen: View {
                 // Score card
                 ScoreCard(
                     score: scores.overallScore,
-                    badge: "PASSED",
+                    badge: L10n.tr("koraidv.score.passed"),
                     gradient: KoraColors.tealGradient
                 )
+                .accessibilityLabel("Overall score: \(scores.overallScore) percent. Passed")
 
                 Spacer().frame(height: 16)
 
@@ -157,6 +162,7 @@ struct SuccessScreen: View {
                 VStack(spacing: 8) {
                     ForEach(Array(metrics.enumerated()), id: \.offset) { _, metric in
                         ScoreMetricRow(metric: metric)
+                            .accessibilityLabel("\(metric.label): \(metric.score) percent. \(metric.status == .pass ? "Passed" : "Failed")")
                     }
                 }
                 .padding(.horizontal, 24)
@@ -164,7 +170,7 @@ struct SuccessScreen: View {
                 Spacer().frame(height: 32)
 
                 // Done button
-                KoraButton(text: "Done", action: onDone)
+                KoraButton(text: L10n.tr("koraidv.result.approved.button"), action: onDone)
                     .padding(.horizontal, 24)
                     .padding(.bottom, 40)
             }
@@ -174,10 +180,10 @@ struct SuccessScreen: View {
 
     private func buildMetrics(scores: ScoreBreakdown) -> [ScoreMetric] {
         [
-            ScoreMetric(label: "Liveness", score: scores.liveness, iconName: "eye.fill", status: scores.liveness >= 70 ? .pass : .fail),
-            ScoreMetric(label: "Name Match", score: scores.nameMatch, iconName: "checkmark.circle.fill", status: scores.nameMatch >= 70 ? .pass : .fail),
-            ScoreMetric(label: "Document Quality", score: scores.documentQuality, iconName: "creditcard.fill", status: scores.documentQuality >= 70 ? .pass : .fail),
-            ScoreMetric(label: "Selfie Match", score: scores.selfieMatch, iconName: "person.fill", status: scores.selfieMatch >= 70 ? .pass : .fail),
+            ScoreMetric(label: L10n.tr("koraidv.score.liveness"), score: scores.liveness, iconName: "eye.fill", status: scores.liveness >= 70 ? .pass : .fail),
+            ScoreMetric(label: L10n.tr("koraidv.score.name_match"), score: scores.nameMatch, iconName: "checkmark.circle.fill", status: scores.nameMatch >= 70 ? .pass : .fail),
+            ScoreMetric(label: L10n.tr("koraidv.score.document_quality"), score: scores.documentQuality, iconName: "creditcard.fill", status: scores.documentQuality >= 70 ? .pass : .fail),
+            ScoreMetric(label: L10n.tr("koraidv.score.selfie_match"), score: scores.selfieMatch, iconName: "person.fill", status: scores.selfieMatch >= 70 ? .pass : .fail),
         ]
     }
 }
@@ -203,14 +209,16 @@ struct RejectedScreen: View {
                     iconColor: .white,
                     outerRingColor: KoraColors.ErrorRedBorder
                 )
+                .accessibilityHidden(true)
 
                 Spacer().frame(height: 20)
 
-                Text("Verification rejected")
+                Text(L10n.tr("koraidv.result.rejected.title"))
                     .font(.system(size: 22, weight: .bold))
                     .foregroundColor(KoraColors.TextPrimary)
+                    .accessibilityAddTraits(.isHeader)
 
-                Text("We couldn't verify your identity")
+                Text(L10n.tr("koraidv.result.rejected.subtitle"))
                     .font(.system(size: 14))
                     .foregroundColor(KoraColors.TextSecondary)
                     .padding(.top, 4)
@@ -220,9 +228,10 @@ struct RejectedScreen: View {
                 // Score card
                 ScoreCard(
                     score: scores.overallScore,
-                    badge: "REJECTED",
+                    badge: L10n.tr("koraidv.score.rejected"),
                     gradient: KoraColors.redGradient
                 )
+                .accessibilityLabel("Overall score: \(scores.overallScore) percent. Rejected")
 
                 Spacer().frame(height: 16)
 
@@ -230,6 +239,7 @@ struct RejectedScreen: View {
                 VStack(spacing: 8) {
                     ForEach(Array(metrics.enumerated()), id: \.offset) { _, metric in
                         ScoreMetricRow(metric: metric)
+                            .accessibilityLabel("\(metric.label): \(metric.score) percent. \(metric.status == .pass ? "Passed" : "Failed")")
                     }
                 }
                 .padding(.horizontal, 24)
@@ -237,7 +247,7 @@ struct RejectedScreen: View {
                 Spacer().frame(height: 32)
 
                 // Try again button
-                KoraButton(text: "Try again", action: onRetry)
+                KoraButton(text: L10n.tr("koraidv.result.rejected.button"), action: onRetry)
                     .padding(.horizontal, 24)
                     .padding(.bottom, 40)
             }
@@ -248,24 +258,24 @@ struct RejectedScreen: View {
     private func buildMetrics(scores: ScoreBreakdown) -> [ScoreMetric] {
         [
             ScoreMetric(
-                label: "Liveness", score: scores.liveness, iconName: "eye.fill",
+                label: L10n.tr("koraidv.score.liveness"), score: scores.liveness, iconName: "eye.fill",
                 status: scores.liveness >= 70 ? .pass : .fail,
-                errorMessage: scores.liveness < 70 ? "Liveness check failed" : nil
+                errorMessage: scores.liveness < 70 ? L10n.tr("koraidv.score.error.liveness") : nil
             ),
             ScoreMetric(
-                label: "Name Match", score: scores.nameMatch, iconName: "checkmark.circle.fill",
+                label: L10n.tr("koraidv.score.name_match"), score: scores.nameMatch, iconName: "checkmark.circle.fill",
                 status: scores.nameMatch >= 70 ? .pass : .fail,
-                errorMessage: scores.nameMatch < 70 ? "Name does not match" : nil
+                errorMessage: scores.nameMatch < 70 ? L10n.tr("koraidv.score.error.name") : nil
             ),
             ScoreMetric(
-                label: "Document Quality", score: scores.documentQuality, iconName: "creditcard.fill",
+                label: L10n.tr("koraidv.score.document_quality"), score: scores.documentQuality, iconName: "creditcard.fill",
                 status: scores.documentQuality >= 70 ? .pass : .fail,
-                errorMessage: scores.documentQuality < 70 ? "Document quality too low" : nil
+                errorMessage: scores.documentQuality < 70 ? L10n.tr("koraidv.score.error.document") : nil
             ),
             ScoreMetric(
-                label: "Selfie Match", score: scores.selfieMatch, iconName: "person.fill",
+                label: L10n.tr("koraidv.score.selfie_match"), score: scores.selfieMatch, iconName: "person.fill",
                 status: scores.selfieMatch >= 70 ? .pass : .fail,
-                errorMessage: scores.selfieMatch < 70 ? "Face does not match document" : nil
+                errorMessage: scores.selfieMatch < 70 ? L10n.tr("koraidv.score.error.selfie") : nil
             ),
         ]
     }
@@ -289,14 +299,16 @@ struct ExpiredDocumentScreen: View {
                     iconColor: .white,
                     outerRingColor: KoraColors.WarningAmberBorder
                 )
+                .accessibilityHidden(true)
 
                 Spacer().frame(height: 20)
 
-                Text("Document expired")
+                Text(L10n.tr("koraidv.result.expired.title"))
                     .font(.system(size: 22, weight: .bold))
                     .foregroundColor(KoraColors.TextPrimary)
+                    .accessibilityAddTraits(.isHeader)
 
-                Text("The document you provided has expired")
+                Text(L10n.tr("koraidv.result.expired.subtitle"))
                     .font(.system(size: 14))
                     .foregroundColor(KoraColors.TextSecondary)
                     .padding(.top, 4)
@@ -307,7 +319,7 @@ struct ExpiredDocumentScreen: View {
                 VStack(alignment: .leading, spacing: 12) {
                     if let docType = verification.documentVerification?.documentType {
                         HStack {
-                            Text("Document type")
+                            Text(L10n.tr("koraidv.result.expired.doc_type"))
                                 .font(.system(size: 13))
                                 .foregroundColor(KoraColors.TextSecondary)
                             Spacer()
@@ -319,7 +331,7 @@ struct ExpiredDocumentScreen: View {
 
                     if let country = verification.documentVerification?.issuingCountry {
                         HStack {
-                            Text("Issuing country")
+                            Text(L10n.tr("koraidv.result.expired.country"))
                                 .font(.system(size: 13))
                                 .foregroundColor(KoraColors.TextSecondary)
                             Spacer()
@@ -331,7 +343,7 @@ struct ExpiredDocumentScreen: View {
 
                     if let expDate = verification.documentVerification?.expirationDate {
                         HStack {
-                            Text("Expiration date")
+                            Text(L10n.tr("koraidv.result.expired.date"))
                                 .font(.system(size: 13))
                                 .foregroundColor(KoraColors.TextSecondary)
                             Spacer()
@@ -354,16 +366,17 @@ struct ExpiredDocumentScreen: View {
 
                 // Guidance tips
                 VStack(alignment: .leading, spacing: 16) {
-                    GuidanceTip(number: 1, text: "Check that your document has not passed its expiration date")
-                    GuidanceTip(number: 2, text: "Ensure you're using a currently valid government-issued ID")
-                    GuidanceTip(number: 3, text: "Contact your local authority to renew an expired document")
+                    GuidanceTip(number: 1, text: L10n.tr("koraidv.result.expired.tip1"))
+                    GuidanceTip(number: 2, text: L10n.tr("koraidv.result.expired.tip2"))
+                    GuidanceTip(number: 3, text: L10n.tr("koraidv.result.expired.tip3"))
                 }
                 .padding(.horizontal, 24)
+                .accessibilityElement(children: .combine)
 
                 Spacer().frame(height: 32)
 
                 // Button
-                KoraButton(text: "Try with a valid document", action: onRetry)
+                KoraButton(text: L10n.tr("koraidv.result.expired.button"), action: onRetry)
                     .padding(.horizontal, 24)
                     .padding(.bottom, 40)
             }
@@ -393,14 +406,16 @@ struct ManualReviewScreen: View {
                     iconColor: .white,
                     outerRingColor: KoraColors.InfoBlueBorder
                 )
+                .accessibilityHidden(true)
 
                 Spacer().frame(height: 20)
 
-                Text("Under review")
+                Text(L10n.tr("koraidv.result.review.title"))
                     .font(.system(size: 22, weight: .bold))
                     .foregroundColor(KoraColors.TextPrimary)
+                    .accessibilityAddTraits(.isHeader)
 
-                Text("Your verification requires manual review")
+                Text(L10n.tr("koraidv.result.review.subtitle"))
                     .font(.system(size: 14))
                     .foregroundColor(KoraColors.TextSecondary)
                     .padding(.top, 4)
@@ -410,9 +425,10 @@ struct ManualReviewScreen: View {
                 // Score card
                 ScoreCard(
                     score: scores.overallScore,
-                    badge: "REVIEW",
+                    badge: L10n.tr("koraidv.score.review"),
                     gradient: KoraColors.blueGradient
                 )
+                .accessibilityLabel("Overall score: \(scores.overallScore) percent. Under review")
 
                 Spacer().frame(height: 16)
 
@@ -420,6 +436,7 @@ struct ManualReviewScreen: View {
                 VStack(spacing: 8) {
                     ForEach(Array(metrics.enumerated()), id: \.offset) { _, metric in
                         ScoreMetricRow(metric: metric)
+                            .accessibilityLabel("\(metric.label): \(metric.score) percent. \(metric.status == .pass ? "Passed" : metric.status == .borderline ? "Under review" : "Failed")")
                     }
                 }
                 .padding(.horizontal, 24)
@@ -427,7 +444,7 @@ struct ManualReviewScreen: View {
                 Spacer().frame(height: 32)
 
                 // Got it button
-                KoraButton(text: "Got it", action: onDone)
+                KoraButton(text: L10n.tr("koraidv.result.review.button"), action: onDone)
                     .padding(.horizontal, 24)
                     .padding(.bottom, 40)
             }
@@ -438,10 +455,10 @@ struct ManualReviewScreen: View {
     private func buildMetrics(scores: ScoreBreakdown) -> [ScoreMetric] {
         let selfieStatus: MetricStatus = scores.selfieMatch >= 70 ? .pass : (scores.selfieMatch >= 50 ? .borderline : .fail)
         return [
-            ScoreMetric(label: "Liveness", score: scores.liveness, iconName: "eye.fill", status: scores.liveness >= 70 ? .pass : .borderline),
-            ScoreMetric(label: "Name Match", score: scores.nameMatch, iconName: "checkmark.circle.fill", status: scores.nameMatch >= 70 ? .pass : .borderline),
-            ScoreMetric(label: "Document Quality", score: scores.documentQuality, iconName: "creditcard.fill", status: scores.documentQuality >= 70 ? .pass : .borderline),
-            ScoreMetric(label: "Selfie Match", score: scores.selfieMatch, iconName: selfieStatus == .borderline ? "info.circle.fill" : "person.fill", status: selfieStatus),
+            ScoreMetric(label: L10n.tr("koraidv.score.liveness"), score: scores.liveness, iconName: "eye.fill", status: scores.liveness >= 70 ? .pass : .borderline),
+            ScoreMetric(label: L10n.tr("koraidv.score.name_match"), score: scores.nameMatch, iconName: "checkmark.circle.fill", status: scores.nameMatch >= 70 ? .pass : .borderline),
+            ScoreMetric(label: L10n.tr("koraidv.score.document_quality"), score: scores.documentQuality, iconName: "creditcard.fill", status: scores.documentQuality >= 70 ? .pass : .borderline),
+            ScoreMetric(label: L10n.tr("koraidv.score.selfie_match"), score: scores.selfieMatch, iconName: selfieStatus == .borderline ? "info.circle.fill" : "person.fill", status: selfieStatus),
         ]
     }
 }
@@ -488,12 +505,14 @@ struct ErrorView: View {
                 iconColor: .white,
                 outerRingColor: KoraColors.ErrorRedBorder
             )
+            .accessibilityHidden(true)
 
             Spacer().frame(height: 20)
 
-            Text("Something went wrong")
+            Text(L10n.tr("koraidv.result.error.title"))
                 .font(.system(size: 22, weight: .bold))
                 .foregroundColor(KoraColors.TextPrimary)
+                .accessibilityAddTraits(.isHeader)
 
             Text(error.localizedDescription)
                 .font(.system(size: 15))
@@ -519,16 +538,17 @@ struct ErrorView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 14))
                 .padding(.horizontal, 24)
                 .padding(.top, 24)
+                .accessibilityElement(children: .combine)
             }
 
             Spacer()
 
             // Buttons
             VStack(spacing: 12) {
-                KoraButton(text: "Try again", action: onRetry)
+                KoraButton(text: L10n.tr("koraidv.result.error.retry"), action: onRetry)
 
                 KoraButton(
-                    text: "Cancel",
+                    text: L10n.tr("koraidv.result.error.cancel"),
                     action: onCancel,
                     variant: .whiteOutline
                 )
@@ -564,6 +584,7 @@ struct LoadingView: View {
                     .accentColor(KoraColors.Teal)
                     .frame(width: 100, height: 100)
             }
+            .accessibilityHidden(true)
 
             Spacer().frame(height: 24)
 

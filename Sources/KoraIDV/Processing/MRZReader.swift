@@ -163,7 +163,7 @@ final class MRZReader {
         return textCharacters.isSubset(of: mrzCharacters) && text.count >= 20
     }
 
-    private func parseMRZ(_ text: String) -> MRZData? {
+    func parseMRZ(_ text: String) -> MRZData? {
         // Clean the text — do NOT replace O with 0 globally as it corrupts
         // country codes, names, and nationality fields. The O→0 fix is
         // applied selectively to numeric-context fields after parsing.
@@ -188,11 +188,11 @@ final class MRZReader {
     }
 
     /// Fix OCR misreads of O as 0 in fields that should only contain digits
-    private func fixNumericOCR(_ text: String) -> String {
+    func fixNumericOCR(_ text: String) -> String {
         return text.replacingOccurrences(of: "O", with: "0")
     }
 
-    private func detectFormat(_ text: String) -> MRZFormat? {
+    func detectFormat(_ text: String) -> MRZFormat? {
         let length = text.count
 
         // TD1: 3 lines × 30 = 90 chars. Only match lengths that can't be TD3.
@@ -372,14 +372,14 @@ final class MRZReader {
         )
     }
 
-    private func parseName(_ nameField: String) -> (lastName: String, firstName: String) {
+    func parseName(_ nameField: String) -> (lastName: String, firstName: String) {
         let parts = nameField.components(separatedBy: "<<")
         let lastName = parts.first?.replacingOccurrences(of: "<", with: " ").trimmingCharacters(in: .whitespaces) ?? ""
         let firstName = parts.dropFirst().first?.replacingOccurrences(of: "<", with: " ").trimmingCharacters(in: .whitespaces) ?? ""
         return (lastName, firstName)
     }
 
-    private func validateCheckDigit(_ data: String, check: String) -> Bool {
+    func validateCheckDigit(_ data: String, check: String) -> Bool {
         let weights = [7, 3, 1]
         var sum = 0
 

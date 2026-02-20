@@ -1,0 +1,113 @@
+/* ConsentView */
+"koraidv.consent.title" = "Vérifiez votre identité";
+"koraidv.consent.description" = "Nous devons vérifier votre identité afin de respecter la réglementation et de sécuriser votre compte.";
+"koraidv.consent.item.id.title" = "Pièce d'identité officielle";
+"koraidv.consent.item.id.subtitle" = "Photo de votre passeport ou recto et verso de votre pièce d'identité";
+"koraidv.consent.item.selfie.title" = "Photo selfie";
+"koraidv.consent.item.selfie.subtitle" = "Un selfie rapide pour correspondre à votre pièce d'identité";
+"koraidv.consent.item.liveness.title" = "Vérification de présence";
+"koraidv.consent.item.liveness.subtitle" = "Une courte vidéo pour confirmer que c'est bien vous";
+"koraidv.consent.button" = "Commencer";
+"koraidv.consent.privacy" = "En continuant, vous acceptez notre Politique de confidentialité et consentez au traitement biométrique.";
+
+/* CountrySelectionView */
+"koraidv.country.title" = "Sélectionnez votre pays";
+"koraidv.country.subtitle" = "Où votre document a-t-il été délivré ?";
+"koraidv.country.search" = "Rechercher un pays...";
+"koraidv.country.continue" = "Continuer";
+
+/* DocumentSelectionView */
+"koraidv.document.title" = "Choisissez votre document";
+"koraidv.document.front_back" = "Recto et verso requis";
+"koraidv.document.photo_page" = "Page photo uniquement";
+
+/* DocumentCaptureView */
+"koraidv.capture.front" = "Recto de la pièce d'identité";
+"koraidv.capture.back" = "Verso de la pièce d'identité";
+"koraidv.capture.step.front" = "Recto";
+"koraidv.capture.step.back" = "Verso";
+"koraidv.capture.hold_steady" = "Ne bougez pas...";
+"koraidv.capture.scanning" = "Numérisation du document...";
+"koraidv.capture.processing" = "Traitement en cours...";
+"koraidv.capture.review.title" = "Vérifiez votre photo";
+"koraidv.capture.review.quality" = "Bonne qualité";
+"koraidv.capture.review.sharp" = "Nette";
+"koraidv.capture.review.well_lit" = "Bien éclairée";
+"koraidv.capture.review.no_glare" = "Sans reflet";
+"koraidv.capture.retake" = "Reprendre";
+"koraidv.capture.looks_good" = "C'est bon";
+
+/* SelfieCaptureView */
+"koraidv.selfie.title" = "Selfie";
+"koraidv.selfie.face_camera" = "Faites face à la caméra";
+"koraidv.selfie.neutral" = "Gardez une expression neutre";
+"koraidv.selfie.hold_still" = "Ne bougez pas...";
+"koraidv.selfie.detecting" = "Détection du visage...";
+"koraidv.selfie.processing" = "Traitement en cours...";
+"koraidv.selfie.review.title" = "Est-ce que cela vous ressemble ?";
+"koraidv.selfie.review.subtitle" = "Vérifiez la clarté et l'éclairage";
+"koraidv.selfie.review.detected" = "Visage détecté";
+"koraidv.selfie.review.clear" = "Net";
+"koraidv.selfie.review.centered" = "Centré";
+"koraidv.selfie.review.well_lit" = "Bien éclairé";
+"koraidv.selfie.retake" = "Reprendre";
+"koraidv.selfie.use_this" = "Utiliser cette photo";
+"koraidv.selfie.review" = "Vérifier";
+
+/* LivenessView */
+"koraidv.liveness.title" = "Vérification de présence";
+"koraidv.liveness.preparing" = "Préparation...";
+"koraidv.liveness.challenge_of" = "Défi %d sur %d";
+
+/* ResultView - Success */
+"koraidv.result.approved.title" = "Vérification approuvée";
+"koraidv.result.approved.subtitle" = "Votre identité a été vérifiée avec succès";
+"koraidv.result.approved.button" = "Terminé";
+
+/* ResultView - Rejected */
+"koraidv.result.rejected.title" = "Vérification rejetée";
+"koraidv.result.rejected.subtitle" = "Nous n'avons pas pu vérifier votre identité";
+"koraidv.result.rejected.button" = "Réessayer";
+
+/* ResultView - Expired */
+"koraidv.result.expired.title" = "Document expiré";
+"koraidv.result.expired.subtitle" = "Le document que vous avez fourni a expiré";
+"koraidv.result.expired.doc_type" = "Type de document";
+"koraidv.result.expired.country" = "Pays de délivrance";
+"koraidv.result.expired.date" = "Date d'expiration";
+"koraidv.result.expired.tip1" = "Vérifiez que votre document n'a pas dépassé sa date d'expiration";
+"koraidv.result.expired.tip2" = "Assurez-vous d'utiliser une pièce d'identité officielle en cours de validité";
+"koraidv.result.expired.tip3" = "Contactez votre autorité locale pour renouveler un document expiré";
+"koraidv.result.expired.button" = "Réessayer avec un document valide";
+
+/* ResultView - Under Review */
+"koraidv.result.review.title" = "En cours d'examen";
+"koraidv.result.review.subtitle" = "Votre vérification nécessite un examen manuel";
+"koraidv.result.review.button" = "Compris";
+
+/* ResultView - Error */
+"koraidv.result.error.title" = "Une erreur est survenue";
+"koraidv.result.error.retry" = "Réessayer";
+"koraidv.result.error.cancel" = "Annuler";
+
+/* ResultView - Processing */
+"koraidv.result.processing.title" = "Vérification de votre identité";
+"koraidv.result.processing.subtitle" = "Cela peut prendre quelques instants";
+
+/* Score labels */
+"koraidv.score.overall" = "Score global";
+"koraidv.score.liveness" = "Présence";
+"koraidv.score.name_match" = "Correspondance du nom";
+"koraidv.score.document_quality" = "Qualité du document";
+"koraidv.score.selfie_match" = "Correspondance du selfie";
+
+/* Score badges */
+"koraidv.score.passed" = "VALIDÉ";
+"koraidv.score.rejected" = "REJETÉ";
+"koraidv.score.review" = "EN EXAMEN";
+
+/* Score error messages */
+"koraidv.score.error.liveness" = "La vérification de présence a échoué";
+"koraidv.score.error.name" = "Le nom ne correspond pas";
+"koraidv.score.error.document" = "Qualité du document insuffisante";
+"koraidv.score.error.selfie" = "Le visage ne correspond pas au document";

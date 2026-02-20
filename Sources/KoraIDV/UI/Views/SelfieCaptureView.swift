@@ -37,6 +37,8 @@ struct SelfieCaptureView: View {
             // Camera preview
             CameraPreviewView(cameraManager: viewModel.selfieCapture.cameraManager)
                 .ignoresSafeArea()
+                .accessibilityLabel("Front camera for selfie")
+                .accessibilityAddTraits(.isImage)
 
             Color.black.opacity(0.4)
                 .ignoresSafeArea()
@@ -46,18 +48,19 @@ struct SelfieCaptureView: View {
                 StepProgressBar(total: 5, current: 4, isDark: true)
 
                 DarkScreenHeader(
-                    title: "Selfie",
+                    title: L10n.tr("koraidv.selfie.title"),
                     onClose: onCancel
                 )
 
                 Spacer().frame(height: 16)
 
                 // Title
-                Text("Face the camera")
+                Text(L10n.tr("koraidv.selfie.face_camera"))
                     .font(.system(size: 24, weight: .bold))
                     .foregroundColor(.white)
+                    .accessibilityAddTraits(.isHeader)
 
-                Text("Keep a neutral expression")
+                Text(L10n.tr("koraidv.selfie.neutral"))
                     .font(.system(size: 15))
                     .foregroundColor(.white.opacity(0.5))
                     .padding(.top, 4)
@@ -88,6 +91,8 @@ struct SelfieCaptureView: View {
                             .frame(width: 248, height: 308)
                             .rotationEffect(.degrees(-90))
                             .animation(.linear(duration: 0.1), value: viewModel.captureProgress)
+                            .accessibilityLabel("Capture progress")
+                            .accessibilityValue("\(Int(viewModel.captureProgress * 100)) percent")
                     }
                 }
 
@@ -95,7 +100,7 @@ struct SelfieCaptureView: View {
 
                 // Guidance pill
                 GuidancePill(
-                    text: viewModel.isFaceDetected ? "Hold still..." : "Detecting face...",
+                    text: viewModel.isFaceDetected ? L10n.tr("koraidv.selfie.hold_still") : L10n.tr("koraidv.selfie.detecting"),
                     variant: viewModel.isFaceDetected ? .ready : .scanning
                 )
 
@@ -110,7 +115,7 @@ struct SelfieCaptureView: View {
                     ProgressView()
                         .scaleEffect(1.5)
                         .accentColor(.white)
-                    Text("Processing...")
+                    Text(L10n.tr("koraidv.selfie.processing"))
                         .font(.system(size: 15))
                         .foregroundColor(.white)
                 }
@@ -126,17 +131,18 @@ struct SelfieCaptureView: View {
             StepProgressBar(total: 5, current: 4, isDark: true)
 
             DarkScreenHeader(
-                title: "Review",
+                title: L10n.tr("koraidv.selfie.review"),
                 onClose: onCancel
             )
 
             Spacer().frame(height: 16)
 
-            Text("Does this look like you?")
+            Text(L10n.tr("koraidv.selfie.review.title"))
                 .font(.system(size: 24, weight: .bold))
                 .foregroundColor(.white)
+                .accessibilityAddTraits(.isHeader)
 
-            Text("Check clarity and lighting")
+            Text(L10n.tr("koraidv.selfie.review.subtitle"))
                 .font(.system(size: 15))
                 .foregroundColor(.white.opacity(0.5))
                 .padding(.top, 4)
@@ -151,6 +157,7 @@ struct SelfieCaptureView: View {
                         .scaledToFill()
                         .frame(width: 240, height: 300)
                         .clipShape(Ellipse())
+                        .accessibilityLabel("Captured selfie photo")
                 }
 
                 Ellipse()
@@ -160,23 +167,24 @@ struct SelfieCaptureView: View {
 
             Spacer().frame(height: 12)
 
-            ReviewBadge(text: "Face detected")
+            ReviewBadge(text: L10n.tr("koraidv.selfie.review.detected"))
 
             Spacer().frame(height: 16)
 
             // Quality checks
             HStack(spacing: 20) {
-                ReviewQualityCheck(label: "Clear")
-                ReviewQualityCheck(label: "Centered")
-                ReviewQualityCheck(label: "Well-lit")
+                ReviewQualityCheck(label: L10n.tr("koraidv.selfie.review.clear"))
+                ReviewQualityCheck(label: L10n.tr("koraidv.selfie.review.centered"))
+                ReviewQualityCheck(label: L10n.tr("koraidv.selfie.review.well_lit"))
             }
+            .accessibilityElement(children: .combine)
 
             Spacer()
 
             // Buttons
             HStack(spacing: 12) {
                 KoraButton(
-                    text: "Retake",
+                    text: L10n.tr("koraidv.selfie.retake"),
                     action: {
                         showReview = false
                         capturedImageData = nil
@@ -184,12 +192,14 @@ struct SelfieCaptureView: View {
                     variant: .darkOutline
                 )
                 .frame(maxWidth: .infinity)
+                .accessibilityHint("Double tap to retake the selfie")
 
                 KoraButton(
-                    text: "Use this",
+                    text: L10n.tr("koraidv.selfie.use_this"),
                     action: { onCapture(imageData) }
                 )
                 .frame(maxWidth: .infinity)
+                .accessibilityHint("Double tap to use this selfie")
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 40)

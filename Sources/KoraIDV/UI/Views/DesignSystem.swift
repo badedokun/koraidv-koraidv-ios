@@ -177,6 +177,8 @@ struct StepProgressBar: View {
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 8)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Step \(current) of \(total)")
     }
 }
 
@@ -372,6 +374,7 @@ struct DarkScreenHeader: View {
                     .background(Color.white.opacity(0.12))
                     .clipShape(Circle())
             }
+            .accessibilityLabel("Close")
 
             VStack(spacing: 2) {
                 Text(title)
@@ -424,6 +427,7 @@ struct GuidancePill: View {
         .padding(.vertical, 10)
         .background(bgColor)
         .clipShape(RoundedRectangle(cornerRadius: 24))
+        .accessibilityAddTraits(.updatesFrequently)
     }
 
     private var bgColor: Color {
@@ -486,6 +490,7 @@ struct LightCloseButton: View {
                 .background(KoraColors.CloseButtonBg)
                 .clipShape(Circle())
         }
+        .accessibilityLabel("Close")
     }
 }
 
@@ -501,6 +506,7 @@ struct LightBackButton: View {
                 .background(KoraColors.CloseButtonBg)
                 .clipShape(Circle())
         }
+        .accessibilityLabel("Go back")
     }
 }
 
@@ -621,6 +627,7 @@ struct ReviewBadge: View {
         .padding(.vertical, 6)
         .background(Color(hex: "#10B981").opacity(0.2))
         .clipShape(RoundedRectangle(cornerRadius: 20))
+        .accessibilityLabel(text)
     }
 }
 

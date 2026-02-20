@@ -40,6 +40,8 @@ struct DocumentCaptureView: View {
             // Camera preview
             CameraPreviewView(cameraManager: viewModel.cameraManager)
                 .ignoresSafeArea()
+                .accessibilityLabel("Camera viewfinder")
+                .accessibilityAddTraits(.isImage)
 
             // Dark overlay
             Color.black.opacity(0.4)
@@ -51,7 +53,7 @@ struct DocumentCaptureView: View {
 
                 // Header
                 DarkScreenHeader(
-                    title: side == .front ? "Front of ID" : "Back of ID",
+                    title: side == .front ? L10n.tr("koraidv.capture.front") : L10n.tr("koraidv.capture.back"),
                     subtitle: documentType.displayName,
                     onClose: onCancel
                 )
@@ -66,12 +68,12 @@ struct DocumentCaptureView: View {
                 // Step pills
                 HStack(spacing: 8) {
                     StepPill(
-                        text: "Front",
+                        text: L10n.tr("koraidv.capture.step.front"),
                         state: side == .front ? .active : .done
                     )
                     if documentType.requiresBack {
                         StepPill(
-                            text: "Back",
+                            text: L10n.tr("koraidv.capture.step.back"),
                             state: side == .back ? .active : .inactive
                         )
                     }
@@ -81,7 +83,7 @@ struct DocumentCaptureView: View {
 
                 // Guidance pill
                 GuidancePill(
-                    text: viewModel.isDocumentDetected ? "Hold steady..." : "Scanning document...",
+                    text: viewModel.isDocumentDetected ? L10n.tr("koraidv.capture.hold_steady") : L10n.tr("koraidv.capture.scanning"),
                     variant: viewModel.isDocumentDetected ? .ready : .scanning
                 )
 
@@ -96,7 +98,7 @@ struct DocumentCaptureView: View {
                     ProgressView()
                         .scaleEffect(1.5)
                         .accentColor(.white)
-                    Text("Processing...")
+                    Text(L10n.tr("koraidv.capture.processing"))
                         .font(.system(size: 15))
                         .foregroundColor(.white)
                 }
@@ -147,7 +149,7 @@ struct DocumentCaptureView: View {
             StepProgressBar(total: 5, current: 3, isDark: true)
 
             DarkScreenHeader(
-                title: "Review your photo",
+                title: L10n.tr("koraidv.capture.review.title"),
                 onClose: onCancel
             )
 
@@ -161,16 +163,18 @@ struct DocumentCaptureView: View {
                         .aspectRatio(contentMode: .fit)
                         .frame(maxWidth: 300, maxHeight: 200)
                         .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .accessibilityLabel("Captured document photo")
                 }
 
-                ReviewBadge(text: "Good quality")
+                ReviewBadge(text: L10n.tr("koraidv.capture.review.quality"))
 
                 // Quality checks
                 HStack(spacing: 20) {
-                    ReviewQualityCheck(label: "Sharp")
-                    ReviewQualityCheck(label: "Well-lit")
-                    ReviewQualityCheck(label: "No glare")
+                    ReviewQualityCheck(label: L10n.tr("koraidv.capture.review.sharp"))
+                    ReviewQualityCheck(label: L10n.tr("koraidv.capture.review.well_lit"))
+                    ReviewQualityCheck(label: L10n.tr("koraidv.capture.review.no_glare"))
                 }
+                .accessibilityElement(children: .combine)
             }
 
             Spacer()
@@ -178,7 +182,7 @@ struct DocumentCaptureView: View {
             // Buttons
             HStack(spacing: 12) {
                 KoraButton(
-                    text: "Retake",
+                    text: L10n.tr("koraidv.capture.retake"),
                     action: {
                         showReview = false
                         capturedImageData = nil
@@ -186,12 +190,14 @@ struct DocumentCaptureView: View {
                     variant: .darkOutline
                 )
                 .frame(maxWidth: .infinity)
+                .accessibilityHint("Double tap to retake the photo")
 
                 KoraButton(
-                    text: "Looks good",
+                    text: L10n.tr("koraidv.capture.looks_good"),
                     action: { onCapture(imageData) }
                 )
                 .frame(maxWidth: .infinity)
+                .accessibilityHint("Double tap to accept this photo")
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 40)

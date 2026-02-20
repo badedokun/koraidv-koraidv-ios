@@ -1,0 +1,113 @@
+/* ConsentView */
+"koraidv.consent.title" = "Verify your identity";
+"koraidv.consent.description" = "We need to verify your identity to comply with regulations and keep your account secure.";
+"koraidv.consent.item.id.title" = "Government-issued ID";
+"koraidv.consent.item.id.subtitle" = "Photo of your passport or front & back of your ID";
+"koraidv.consent.item.selfie.title" = "Selfie photo";
+"koraidv.consent.item.selfie.subtitle" = "A quick selfie to match your ID";
+"koraidv.consent.item.liveness.title" = "Liveness check";
+"koraidv.consent.item.liveness.subtitle" = "Quick video to confirm it's really you";
+"koraidv.consent.button" = "Get started";
+"koraidv.consent.privacy" = "By continuing, you agree to our Privacy Policy and consent to biometric processing.";
+
+/* CountrySelectionView */
+"koraidv.country.title" = "Select your country";
+"koraidv.country.subtitle" = "Where was your document issued?";
+"koraidv.country.search" = "Search countries...";
+"koraidv.country.continue" = "Continue";
+
+/* DocumentSelectionView */
+"koraidv.document.title" = "Choose your document";
+"koraidv.document.front_back" = "Front & back required";
+"koraidv.document.photo_page" = "Photo page only";
+
+/* DocumentCaptureView */
+"koraidv.capture.front" = "Front of ID";
+"koraidv.capture.back" = "Back of ID";
+"koraidv.capture.step.front" = "Front";
+"koraidv.capture.step.back" = "Back";
+"koraidv.capture.hold_steady" = "Hold steady...";
+"koraidv.capture.scanning" = "Scanning document...";
+"koraidv.capture.processing" = "Processing...";
+"koraidv.capture.review.title" = "Review your photo";
+"koraidv.capture.review.quality" = "Good quality";
+"koraidv.capture.review.sharp" = "Sharp";
+"koraidv.capture.review.well_lit" = "Well-lit";
+"koraidv.capture.review.no_glare" = "No glare";
+"koraidv.capture.retake" = "Retake";
+"koraidv.capture.looks_good" = "Looks good";
+
+/* SelfieCaptureView */
+"koraidv.selfie.title" = "Selfie";
+"koraidv.selfie.face_camera" = "Face the camera";
+"koraidv.selfie.neutral" = "Keep a neutral expression";
+"koraidv.selfie.hold_still" = "Hold still...";
+"koraidv.selfie.detecting" = "Detecting face...";
+"koraidv.selfie.processing" = "Processing...";
+"koraidv.selfie.review.title" = "Does this look like you?";
+"koraidv.selfie.review.subtitle" = "Check clarity and lighting";
+"koraidv.selfie.review.detected" = "Face detected";
+"koraidv.selfie.review.clear" = "Clear";
+"koraidv.selfie.review.centered" = "Centered";
+"koraidv.selfie.review.well_lit" = "Well-lit";
+"koraidv.selfie.retake" = "Retake";
+"koraidv.selfie.use_this" = "Use this";
+"koraidv.selfie.review" = "Review";
+
+/* LivenessView */
+"koraidv.liveness.title" = "Liveness Check";
+"koraidv.liveness.preparing" = "Preparing...";
+"koraidv.liveness.challenge_of" = "Challenge %d of %d";
+
+/* ResultView - Success */
+"koraidv.result.approved.title" = "Verification approved";
+"koraidv.result.approved.subtitle" = "Your identity has been successfully verified";
+"koraidv.result.approved.button" = "Done";
+
+/* ResultView - Rejected */
+"koraidv.result.rejected.title" = "Verification rejected";
+"koraidv.result.rejected.subtitle" = "We couldn't verify your identity";
+"koraidv.result.rejected.button" = "Try again";
+
+/* ResultView - Expired */
+"koraidv.result.expired.title" = "Document expired";
+"koraidv.result.expired.subtitle" = "The document you provided has expired";
+"koraidv.result.expired.doc_type" = "Document type";
+"koraidv.result.expired.country" = "Issuing country";
+"koraidv.result.expired.date" = "Expiration date";
+"koraidv.result.expired.tip1" = "Check that your document has not passed its expiration date";
+"koraidv.result.expired.tip2" = "Ensure you're using a currently valid government-issued ID";
+"koraidv.result.expired.tip3" = "Contact your local authority to renew an expired document";
+"koraidv.result.expired.button" = "Try with a valid document";
+
+/* ResultView - Under Review */
+"koraidv.result.review.title" = "Under review";
+"koraidv.result.review.subtitle" = "Your verification requires manual review";
+"koraidv.result.review.button" = "Got it";
+
+/* ResultView - Error */
+"koraidv.result.error.title" = "Something went wrong";
+"koraidv.result.error.retry" = "Try again";
+"koraidv.result.error.cancel" = "Cancel";
+
+/* ResultView - Processing */
+"koraidv.result.processing.title" = "Verifying your identity";
+"koraidv.result.processing.subtitle" = "This may take a few moments";
+
+/* Score labels */
+"koraidv.score.overall" = "Overall Score";
+"koraidv.score.liveness" = "Liveness";
+"koraidv.score.name_match" = "Name Match";
+"koraidv.score.document_quality" = "Document Quality";
+"koraidv.score.selfie_match" = "Selfie Match";
+
+/* Score badges */
+"koraidv.score.passed" = "PASSED";
+"koraidv.score.rejected" = "REJECTED";
+"koraidv.score.review" = "REVIEW";
+
+/* Score error messages */
+"koraidv.score.error.liveness" = "Liveness check failed";
+"koraidv.score.error.name" = "Name does not match";
+"koraidv.score.error.document" = "Document quality too low";
+"koraidv.score.error.selfie" = "Face does not match document";

@@ -20,6 +20,7 @@ final class SelfieCapture: NSObject {
     let cameraManager = CameraManager()
     private let faceDetector = FaceDetector()
     private let qualityValidator = QualityValidator()
+    private let antiSpoofCheck = AntiSpoofCheck()
 
     private var isCapturing = false
     private var isAutoCaptureEnabled = true
@@ -156,6 +157,16 @@ extension SelfieCapture: CameraManagerDelegate {
             let validation = self.qualityValidator.validateSelfieImage(image, faceDetection: faceInfo)
 
             if validation.isValid {
+                // Run anti-spoof check before accepting
+                let spoofResult = self.antiSpoofCheck.analyze(image)
+                if !spoofResult.isLikelyReal {
+                    DispatchQueue.main.async {
+                        self.delegate?.selfieCapture(self, didFail: .qualityValidationFailed(["Image appears to be a photo of a screen or printed image"]))
+                        self.resetAutoCapture()
+                    }
+                    return
+                }
+
                 // Compress image
                 if let compressedData = image.jpegData(compressionQuality: 0.85) {
                     DispatchQueue.main.async {
