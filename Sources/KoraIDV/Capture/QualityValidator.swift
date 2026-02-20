@@ -80,6 +80,9 @@ final class QualityValidator {
 
     var thresholds: QualityThresholds
 
+    /// Maximum dimension for analysis images to prevent OOM on large inputs
+    private let maxAnalysisDimension: CGFloat = 480
+
     // MARK: - Initialization
 
     init(thresholds: QualityThresholds = .default) {
@@ -100,8 +103,11 @@ final class QualityValidator {
             )
         }
 
+        // Downsample for analysis to prevent OOM on large images
+        let analysisImage = downsample(cgImage)
+
         // Calculate blur score
-        let blurScore = calculateBlurScore(cgImage)
+        let blurScore = calculateBlurScore(analysisImage)
         if blurScore < thresholds.minBlurScore {
             issues.append(QualityIssue(
                 type: .blur,
@@ -111,7 +117,7 @@ final class QualityValidator {
         }
 
         // Calculate brightness
-        let brightness = calculateBrightness(cgImage)
+        let brightness = calculateBrightness(analysisImage)
         if brightness < thresholds.minBrightness {
             issues.append(QualityIssue(
                 type: .tooDark,
@@ -127,7 +133,7 @@ final class QualityValidator {
         }
 
         // Calculate glare
-        let glarePercentage = calculateGlarePercentage(cgImage)
+        let glarePercentage = calculateGlarePercentage(analysisImage)
         if glarePercentage > thresholds.maxGlarePercentage {
             issues.append(QualityIssue(
                 type: .glare,
@@ -169,8 +175,11 @@ final class QualityValidator {
             )
         }
 
+        // Downsample for analysis to prevent OOM on large images
+        let analysisImage = downsample(cgImage)
+
         // Calculate blur score
-        let blurScore = calculateBlurScore(cgImage)
+        let blurScore = calculateBlurScore(analysisImage)
         if blurScore < thresholds.minBlurScore {
             issues.append(QualityIssue(
                 type: .blur,
@@ -180,7 +189,7 @@ final class QualityValidator {
         }
 
         // Calculate brightness
-        let brightness = calculateBrightness(cgImage)
+        let brightness = calculateBrightness(analysisImage)
         if brightness < thresholds.minBrightness {
             issues.append(QualityIssue(
                 type: .tooDark,
@@ -243,7 +252,7 @@ final class QualityValidator {
         let metrics = QualityMetrics(
             blurScore: blurScore,
             brightness: brightness,
-            glarePercentage: calculateGlarePercentage(cgImage),
+            glarePercentage: calculateGlarePercentage(analysisImage),
             faceSize: faceSize,
             faceConfidence: faceConfidence,
             faceCenterOffset: faceCenterOffset
@@ -259,6 +268,29 @@ final class QualityValidator {
     }
 
     // MARK: - Image Analysis
+
+    /// Downsample image to maxAnalysisDimension to prevent OOM on large inputs
+    private func downsample(_ image: CGImage) -> CGImage {
+        let width = CGFloat(image.width)
+        let height = CGFloat(image.height)
+        let maxDim = max(width, height)
+        guard maxDim > maxAnalysisDimension else { return image }
+
+        let scale = maxAnalysisDimension / maxDim
+        let newWidth = Int(width * scale)
+        let newHeight = Int(height * scale)
+
+        guard let context = CGContext(
+            data: nil, width: newWidth, height: newHeight,
+            bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return image }
+
+        context.interpolationQuality = .medium
+        context.draw(image, in: CGRect(x: 0, y: 0, width: newWidth, height: newHeight))
+        return context.makeImage() ?? image
+    }
 
     /// Calculate blur score using Laplacian variance
     private func calculateBlurScore(_ image: CGImage) -> Double {

@@ -103,6 +103,22 @@ final class APIClient {
         }
     }
 
+    /// Internal initializer that accepts a custom URLSessionConfiguration (for testing).
+    init(configuration: Configuration, sessionConfiguration: URLSessionConfiguration) {
+        self.configuration = configuration
+
+        self.decoder = JSONDecoder()
+        self.decoder.keyDecodingStrategy = .convertFromSnakeCase
+        self.decoder.dateDecodingStrategy = .iso8601
+
+        self.encoder = JSONEncoder()
+        self.encoder.keyEncodingStrategy = .convertToSnakeCase
+        self.encoder.dateEncodingStrategy = .iso8601
+
+        self.delegateProxy = nil
+        self.session = URLSession(configuration: sessionConfiguration)
+    }
+
     deinit {
         session.invalidateAndCancel()
     }
@@ -335,12 +351,26 @@ final class APIClient {
         data: Data,
         completion: @escaping (Result<T, KoraError>) -> Void
     ) {
-        do {
-            let errorResponse = try decoder.decode(APIErrorResponse.self, from: data)
-            completion(.failure(.validationError(errorResponse.errors)))
-        } catch {
-            completion(.failure(.decodingError(error)))
+        // Try format 1: { "errors": [{ "field": "...", "message": "..." }] }
+        if let response = try? decoder.decode(APIErrorResponse.self, from: data),
+           let errors = response.errors, !errors.isEmpty {
+            completion(.failure(.validationError(errors)))
+            return
         }
+        // Try format 2: { "details": { "field": "message" } }
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let details = json["details"] as? [String: String] {
+            let errors = details.map { ValidationError(field: $0.key, message: $0.value) }
+            completion(.failure(.validationError(errors)))
+            return
+        }
+        // Try format 3: { "error": "..." }
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let error = json["error"] as? String {
+            completion(.failure(.validationError([ValidationError(field: "unknown", message: error)])))
+            return
+        }
+        completion(.failure(.invalidResponse))
     }
 }
 
