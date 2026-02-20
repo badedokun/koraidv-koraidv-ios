@@ -44,14 +44,17 @@ enum APIEndpoint {
 }
 
 /// API Client for Kora IDV
-final class APIClient: NSObject, URLSessionDelegate {
+final class APIClient {
 
     // MARK: - Properties
 
     private let configuration: Configuration
-    private var session: URLSession!
+    private let session: URLSession
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
+
+    /// Weak-reference proxy to break URLSession → delegate → APIClient retain cycle
+    private let delegateProxy: SessionDelegateProxy?
 
     /// Maximum retry attempts
     private let maxRetries = 3
@@ -60,13 +63,13 @@ final class APIClient: NSObject, URLSessionDelegate {
     private let baseDelay: TimeInterval = 1.0
 
     /// SHA-256 hashes of pinned certificate public keys (ISRG Root X1 and X2)
-    private static let pinnedKeyHashes: Set<String> = [
+    fileprivate static let pinnedKeyHashes: Set<String> = [
         "jQJTbIh0grw0/1TkHSumWb+Fs0Ggogr621gT3PvPKG0=", // ISRG Root X1
         "C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M="  // ISRG Root X2
     ]
 
     /// Hosts that require certificate pinning
-    private static let pinnedHosts: Set<String> = [
+    fileprivate static let pinnedHosts: Set<String> = [
         "api.koraidv.com",
         "sandbox-api.koraidv.com"
     ]
@@ -84,72 +87,24 @@ final class APIClient: NSObject, URLSessionDelegate {
         self.encoder.keyEncodingStrategy = .convertToSnakeCase
         self.encoder.dateEncodingStrategy = .iso8601
 
-        super.init()
-
         let sessionConfig = URLSessionConfiguration.default
         sessionConfig.timeoutIntervalForRequest = 30
         sessionConfig.timeoutIntervalForResource = 60
 
-        // Enable certificate pinning for production with default base URL
+        // Enable certificate pinning for production with default base URL.
+        // Use a proxy delegate so URLSession does not strongly retain APIClient.
         if configuration.environment == .production && configuration.baseURL == nil {
-            self.session = URLSession(configuration: sessionConfig, delegate: self, delegateQueue: nil)
+            let proxy = SessionDelegateProxy()
+            self.delegateProxy = proxy
+            self.session = URLSession(configuration: sessionConfig, delegate: proxy, delegateQueue: nil)
         } else {
+            self.delegateProxy = nil
             self.session = URLSession(configuration: sessionConfig)
         }
     }
 
-    // MARK: - URLSessionDelegate (Certificate Pinning)
-
-    func urlSession(
-        _ session: URLSession,
-        didReceive challenge: URLAuthenticationChallenge,
-        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
-    ) {
-        guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
-              let serverTrust = challenge.protectionSpace.serverTrust,
-              Self.pinnedHosts.contains(challenge.protectionSpace.host) else {
-            completionHandler(.performDefaultHandling, nil)
-            return
-        }
-
-        // Evaluate the server trust
-        var error: CFError?
-        guard SecTrustEvaluateWithError(serverTrust, &error) else {
-            completionHandler(.cancelAuthenticationChallenge, nil)
-            return
-        }
-
-        // Check each certificate in the chain for a pinned public key
-        let certificateCount = SecTrustGetCertificateCount(serverTrust)
-        var pinMatched = false
-
-        for index in 0..<certificateCount {
-            guard let certificate = SecTrustGetCertificateAtIndex(serverTrust, index) else { continue }
-
-            if let publicKey = SecCertificateCopyKey(certificate),
-               let publicKeyData = SecKeyCopyExternalRepresentation(publicKey, nil) as Data? {
-                let hash = sha256Base64(data: publicKeyData)
-                if Self.pinnedKeyHashes.contains(hash) {
-                    pinMatched = true
-                    break
-                }
-            }
-        }
-
-        if pinMatched {
-            completionHandler(.useCredential, URLCredential(trust: serverTrust))
-        } else {
-            completionHandler(.cancelAuthenticationChallenge, nil)
-        }
-    }
-
-    /// Compute SHA-256 hash and return Base64 encoded string
-    private func sha256Base64(data: Data) -> String {
-        var hash = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
-        data.withUnsafeBytes { buffer in
-            _ = CC_SHA256(buffer.baseAddress, CC_LONG(data.count), &hash)
-        }
-        return Data(hash).base64EncodedString()
+    deinit {
+        session.invalidateAndCancel()
     }
 
     // MARK: - Request Methods
@@ -399,4 +354,74 @@ struct APIErrorResponse: Decodable {
 public struct ValidationError: Decodable {
     public let field: String
     public let message: String
+}
+
+// MARK: - Session Delegate Proxy
+
+/// Weak-reference proxy that breaks the URLSession → APIClient retain cycle.
+/// URLSession retains its delegate strongly; this proxy holds no strong
+/// references back, allowing APIClient to be deallocated normally.
+private final class SessionDelegateProxy: NSObject, URLSessionDelegate {
+
+    func urlSession(
+        _ session: URLSession,
+        didReceive challenge: URLAuthenticationChallenge,
+        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+    ) {
+        guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+              let serverTrust = challenge.protectionSpace.serverTrust,
+              APIClient.pinnedHosts.contains(challenge.protectionSpace.host) else {
+            completionHandler(.performDefaultHandling, nil)
+            return
+        }
+
+        // Evaluate the server trust
+        var error: CFError?
+        guard SecTrustEvaluateWithError(serverTrust, &error) else {
+            completionHandler(.cancelAuthenticationChallenge, nil)
+            return
+        }
+
+        // Extract certificates using the appropriate API for the OS version
+        var certificates: [SecCertificate] = []
+        if #available(iOS 15.0, *) {
+            if let chain = SecTrustCopyCertificateChain(serverTrust) as? [SecCertificate] {
+                certificates = chain
+            }
+        } else {
+            let count = SecTrustGetCertificateCount(serverTrust)
+            for index in 0..<count {
+                if let cert = SecTrustGetCertificateAtIndex(serverTrust, index) {
+                    certificates.append(cert)
+                }
+            }
+        }
+
+        // Check each certificate in the chain for a pinned public key
+        var pinMatched = false
+        for certificate in certificates {
+            if let publicKey = SecCertificateCopyKey(certificate),
+               let publicKeyData = SecKeyCopyExternalRepresentation(publicKey, nil) as Data? {
+                let hash = sha256Base64(data: publicKeyData)
+                if APIClient.pinnedKeyHashes.contains(hash) {
+                    pinMatched = true
+                    break
+                }
+            }
+        }
+
+        if pinMatched {
+            completionHandler(.useCredential, URLCredential(trust: serverTrust))
+        } else {
+            completionHandler(.cancelAuthenticationChallenge, nil)
+        }
+    }
+
+    private func sha256Base64(data: Data) -> String {
+        var hash = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
+        data.withUnsafeBytes { buffer in
+            _ = CC_SHA256(buffer.baseAddress, CC_LONG(data.count), &hash)
+        }
+        return Data(hash).base64EncodedString()
+    }
 }

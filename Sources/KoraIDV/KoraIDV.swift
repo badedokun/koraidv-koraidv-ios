@@ -23,6 +23,9 @@ public final class KoraIDV {
     /// Atomic state — always read/written under stateQueue
     private var _state: SdkState?
 
+    /// Strong reference to the active flow controller to prevent ARC deallocation
+    private var _activeFlowController: VerificationFlowController?
+
     private init() {}
 
     // MARK: - Thread-Safe State Access
@@ -82,8 +85,12 @@ public final class KoraIDV {
                         verification: verification,
                         configuration: currentState.configuration,
                         sessionManager: currentState.sessionManager,
-                        completion: completion
+                        completion: { [weak shared] verificationResult in
+                            shared?.stateQueue.sync { shared?._activeFlowController = nil }
+                            completion(verificationResult)
+                        }
                     )
+                    shared.stateQueue.sync { shared._activeFlowController = flowController }
                     flowController.start(from: presenter)
 
                 case .failure(let error):
@@ -116,8 +123,12 @@ public final class KoraIDV {
                         verification: verification,
                         configuration: currentState.configuration,
                         sessionManager: currentState.sessionManager,
-                        completion: completion
+                        completion: { [weak shared] verificationResult in
+                            shared?.stateQueue.sync { shared?._activeFlowController = nil }
+                            completion(verificationResult)
+                        }
                     )
+                    shared.stateQueue.sync { shared._activeFlowController = flowController }
                     flowController.resume(from: presenter)
 
                 case .failure(let error):

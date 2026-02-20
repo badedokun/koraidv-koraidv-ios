@@ -23,6 +23,7 @@ final class VerificationFlowController {
     private var selfieCaptured = false
     private var livenessSession: LivenessSession?
     private var completedChallenges: Set<String> = []
+    private var isLoadingPresented = false
 
     // MARK: - Initialization
 
@@ -390,6 +391,8 @@ final class VerificationFlowController {
     }
 
     private func showLoading(message: String) {
+        guard !isLoadingPresented else { return }
+        isLoadingPresented = true
         let loadingView = LoadingView(message: message)
         let hostingController = UIHostingController(rootView: loadingView)
         hostingController.modalPresentationStyle = UIModalPresentationStyle.overFullScreen
@@ -398,6 +401,8 @@ final class VerificationFlowController {
     }
 
     private func hideLoading() {
+        guard isLoadingPresented else { return }
+        isLoadingPresented = false
         navigationController?.dismiss(animated: false)
     }
 

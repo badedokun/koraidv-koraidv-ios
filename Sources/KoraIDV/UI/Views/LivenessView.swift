@@ -168,6 +168,8 @@ class LivenessViewModel: ObservableObject {
 
     func stop() {
         livenessManager.stop()
+        onChallengeComplete = nil
+        onAllComplete = nil
     }
 }
 
@@ -187,11 +189,11 @@ extension LivenessViewModel: LivenessManagerDelegate {
         }
     }
 
-    func livenessManager(_ manager: LivenessManager, didCompleteChallenge challenge: LivenessChallenge, passed: Bool) {
+    func livenessManager(_ manager: LivenessManager, didCompleteChallenge challenge: LivenessChallenge, passed: Bool, imageData: Data?) {
         DispatchQueue.main.async {
             self.completedChallenges += 1
+            self.onChallengeComplete?(challenge, imageData ?? Data())
         }
-        onChallengeComplete?(challenge, Data())
     }
 
     func livenessManager(_ manager: LivenessManager, didComplete result: LivenessResult) {

@@ -225,17 +225,28 @@ final class ChallengeDetector {
     }
 
     private func detectNod(face: DetectedFace, direction: NodDirection) -> Bool {
-        guard let pitch = face.pitch else { return false }
-
-        let pitchFloat = Float(pitch)
-
-        // Initialize baseline
-        if initialPitch == nil {
-            initialPitch = pitchFloat
+        // face.pitch requires iOS 15+. When unavailable, fall back to
+        // tracking vertical nose position relative to face bounding box.
+        let pitchValue: Float
+        if let pitch = face.pitch {
+            pitchValue = Float(pitch)
+        } else if let landmarks = face.landmarks, landmarks.nose.count >= 2 {
+            // Approximate pitch from nose tip Y position relative to face center.
+            // As head tilts down, nose moves below center; up, above center.
+            let noseTip = landmarks.nose[landmarks.nose.count / 2]
+            let faceCenterY = face.boundingBox.midY
+            pitchValue = Float(noseTip.y - faceCenterY) * 2.0
+        } else {
             return false
         }
 
-        let delta = pitchFloat - (initialPitch ?? 0)
+        // Initialize baseline
+        if initialPitch == nil {
+            initialPitch = pitchValue
+            return false
+        }
+
+        let delta = pitchValue - (initialPitch ?? 0)
 
         switch direction {
         case .up:

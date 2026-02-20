@@ -195,14 +195,15 @@ final class MRZReader {
     private func detectFormat(_ text: String) -> MRZFormat? {
         let length = text.count
 
-        // TD1: 3 lines × 30 chars = 90
-        if length >= 88 && length <= 92 { return .td1 }
+        // TD1: 3 lines × 30 = 90 chars. Only match lengths that can't be TD3.
+        if length >= 91 && length <= 92 { return .td1 }
 
-        // TD2: 2 lines × 36 chars = 72
-        if length >= 70 && length <= 74 { return .td2 }
-
-        // TD3: 2 lines × 44 chars = 88
+        // TD3: 2 lines × 44 = 88 chars. Ranges 86-90 overlap with TD1 at 88-90;
+        // prefer TD3 here since passport (88) is closer than ID card (90).
         if length >= 86 && length <= 90 { return .td3 }
+
+        // TD2: 2 lines × 36 = 72 chars
+        if length >= 70 && length <= 74 { return .td2 }
 
         return nil
     }

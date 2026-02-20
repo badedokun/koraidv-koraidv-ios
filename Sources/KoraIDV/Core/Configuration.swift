@@ -59,6 +59,14 @@ public struct Configuration {
     ) {
         self.apiKey = apiKey
         self.tenantId = tenantId
+
+        // Reject non-HTTPS custom base URLs to prevent credential leakage
+        if let baseURL = baseURL {
+            precondition(
+                baseURL.scheme?.lowercased() == "https",
+                "KoraIDV: baseURL must use HTTPS. Received: \(baseURL.absoluteString)"
+            )
+        }
         self.baseURL = baseURL
 
         // Auto-detect environment from API key prefix

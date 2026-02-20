@@ -210,7 +210,7 @@ final class QualityValidator {
             let faceArea = face.boundingBox.width * CGFloat(cgImage.width) * face.boundingBox.height * CGFloat(cgImage.height)
             faceSize = Double(faceArea / imageArea)
 
-            if faceSize! < thresholds.minFaceSizePercentage {
+            if let computedFaceSize = faceSize, computedFaceSize < thresholds.minFaceSizePercentage {
                 issues.append(QualityIssue(
                     type: .faceTooSmall,
                     message: "Face is too small. Move closer to the camera.",
@@ -264,6 +264,9 @@ final class QualityValidator {
     private func calculateBlurScore(_ image: CGImage) -> Double {
         let width = image.width
         let height = image.height
+
+        // Need at least 3×3 for Laplacian kernel (loops use 1..<height-1)
+        guard width > 2, height > 2 else { return 0 }
 
         guard let context = CGContext(
             data: nil,

@@ -20,7 +20,7 @@ struct ChallengeResultItem {
 protocol LivenessManagerDelegate: AnyObject {
     func livenessManager(_ manager: LivenessManager, didStartChallenge challenge: LivenessChallenge)
     func livenessManager(_ manager: LivenessManager, didUpdateProgress progress: Float, for challenge: LivenessChallenge)
-    func livenessManager(_ manager: LivenessManager, didCompleteChallenge challenge: LivenessChallenge, passed: Bool)
+    func livenessManager(_ manager: LivenessManager, didCompleteChallenge challenge: LivenessChallenge, passed: Bool, imageData: Data?)
     func livenessManager(_ manager: LivenessManager, didComplete result: LivenessResult)
     func livenessManager(_ manager: LivenessManager, didFail error: KoraError)
 }
@@ -126,7 +126,7 @@ final class LivenessManager: NSObject {
         )
         appendChallengeResult(result)
 
-        delegate?.livenessManager(self, didCompleteChallenge: challenge, passed: false)
+        delegate?.livenessManager(self, didCompleteChallenge: challenge, passed: false, imageData: nil)
         moveToNextChallenge()
     }
 
@@ -236,7 +236,7 @@ final class LivenessManager: NSObject {
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.delegate?.livenessManager(self, didCompleteChallenge: challenge, passed: passed)
+            self.delegate?.livenessManager(self, didCompleteChallenge: challenge, passed: passed, imageData: imageData)
             self.moveToNextChallenge()
         }
     }
