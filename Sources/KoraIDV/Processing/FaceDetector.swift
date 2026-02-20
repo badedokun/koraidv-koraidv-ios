@@ -75,7 +75,7 @@ final class FaceDetector {
         do {
             try handler.perform([request])
         } catch {
-            print("[KoraIDV] Face detection failed: \(error)")
+            KoraIDV.log("Face detection failed: \(error)")
             completion(nil)
         }
     }
@@ -110,7 +110,7 @@ final class FaceDetector {
         do {
             try handler.perform([request])
         } catch {
-            print("[KoraIDV] Face detection failed: \(error)")
+            KoraIDV.log("Face detection failed: \(error)")
             completion(nil)
         }
     }
@@ -122,7 +122,7 @@ final class FaceDetector {
         completion: @escaping (FaceDetectionResult?) -> Void
     ) {
         if let error = error {
-            print("[KoraIDV] Face detection error: \(error)")
+            KoraIDV.log("Face detection error: \(error)")
             completion(nil)
             return
         }

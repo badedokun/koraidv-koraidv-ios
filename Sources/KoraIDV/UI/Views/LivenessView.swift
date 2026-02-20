@@ -161,7 +161,7 @@ class LivenessViewModel: ObservableObject {
         livenessManager.delegate = self
         livenessManager.start(session: session) { result in
             if case .failure(let error) = result {
-                print("Liveness start failed: \(error)")
+                KoraIDV.log("Liveness start failed: \(error)")
             }
         }
     }
@@ -201,7 +201,7 @@ extension LivenessViewModel: LivenessManagerDelegate {
     }
 
     func livenessManager(_ manager: LivenessManager, didFail error: KoraError) {
-        print("Liveness failed: \(error)")
+        KoraIDV.log("Liveness failed: \(error)")
     }
 
     private func startCountdown() {

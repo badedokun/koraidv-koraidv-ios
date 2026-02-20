@@ -60,7 +60,7 @@ final class MRZReader {
             guard let self = self else { return }
 
             if let error = error {
-                print("[KoraIDV] MRZ read error: \(error)")
+                KoraIDV.log("MRZ read error: \(error)")
                 completion(nil)
                 return
             }
@@ -90,7 +90,7 @@ final class MRZReader {
         do {
             try handler.perform([request])
         } catch {
-            print("[KoraIDV] Vision request failed: \(error)")
+            KoraIDV.log("Vision request failed: \(error)")
             completion(nil)
         }
     }
@@ -101,7 +101,7 @@ final class MRZReader {
             guard let self = self else { return }
 
             if let error = error {
-                print("[KoraIDV] MRZ read error: \(error)")
+                KoraIDV.log("MRZ read error: \(error)")
                 completion(nil)
                 return
             }
@@ -128,7 +128,7 @@ final class MRZReader {
         do {
             try handler.perform([request])
         } catch {
-            print("[KoraIDV] Vision request failed: \(error)")
+            KoraIDV.log("Vision request failed: \(error)")
             completion(nil)
         }
     }
@@ -164,9 +164,10 @@ final class MRZReader {
     }
 
     private func parseMRZ(_ text: String) -> MRZData? {
-        // Clean the text
+        // Clean the text — do NOT replace O with 0 globally as it corrupts
+        // country codes, names, and nationality fields. The O→0 fix is
+        // applied selectively to numeric-context fields after parsing.
         let cleaned = text
-            .replacingOccurrences(of: "O", with: "0")
             .replacingOccurrences(of: " ", with: "")
             .replacingOccurrences(of: "\n", with: "")
             .filter { $0.isLetter || $0.isNumber || $0 == "<" }
@@ -184,6 +185,11 @@ final class MRZReader {
         case .td3:
             return parseTD3(cleaned)
         }
+    }
+
+    /// Fix OCR misreads of O as 0 in fields that should only contain digits
+    private func fixNumericOCR(_ text: String) -> String {
+        return text.replacingOccurrences(of: "O", with: "0")
     }
 
     private func detectFormat(_ text: String) -> MRZFormat? {
@@ -209,19 +215,19 @@ final class MRZReader {
         // Line 1 (chars 0-29)
         let documentType = String(text.prefix(2)).replacingOccurrences(of: "<", with: "")
         let issuingCountry = String(text.dropFirst(2).prefix(3))
-        let documentNumber = String(text.dropFirst(5).prefix(9)).replacingOccurrences(of: "<", with: "")
-        let docNumCheck = String(text.dropFirst(14).prefix(1))
+        let documentNumber = fixNumericOCR(String(text.dropFirst(5).prefix(9)).replacingOccurrences(of: "<", with: ""))
+        let docNumCheck = fixNumericOCR(String(text.dropFirst(14).prefix(1)))
         let optionalData1 = String(text.dropFirst(15).prefix(15)).replacingOccurrences(of: "<", with: "")
 
         // Line 2 (chars 30-59)
         let line2Start = text.index(text.startIndex, offsetBy: 30)
         let line2 = String(text[line2Start...])
 
-        let dateOfBirth = String(line2.prefix(6))
-        let dobCheck = String(line2.dropFirst(6).prefix(1))
+        let dateOfBirth = fixNumericOCR(String(line2.prefix(6)))
+        let dobCheck = fixNumericOCR(String(line2.dropFirst(6).prefix(1)))
         let sex = String(line2.dropFirst(7).prefix(1))
-        let expirationDate = String(line2.dropFirst(8).prefix(6))
-        let expCheck = String(line2.dropFirst(14).prefix(1))
+        let expirationDate = fixNumericOCR(String(line2.dropFirst(8).prefix(6)))
+        let expCheck = fixNumericOCR(String(line2.dropFirst(14).prefix(1)))
         let nationality = String(line2.dropFirst(15).prefix(3))
         let optionalData2 = String(line2.dropFirst(18).prefix(11)).replacingOccurrences(of: "<", with: "")
 
@@ -273,14 +279,14 @@ final class MRZReader {
         let line2Start = text.index(text.startIndex, offsetBy: 36)
         let line2 = String(text[line2Start...])
 
-        let documentNumber = String(line2.prefix(9)).replacingOccurrences(of: "<", with: "")
-        let docNumCheck = String(line2.dropFirst(9).prefix(1))
+        let documentNumber = fixNumericOCR(String(line2.prefix(9)).replacingOccurrences(of: "<", with: ""))
+        let docNumCheck = fixNumericOCR(String(line2.dropFirst(9).prefix(1)))
         let nationality = String(line2.dropFirst(10).prefix(3))
-        let dateOfBirth = String(line2.dropFirst(13).prefix(6))
-        let dobCheck = String(line2.dropFirst(19).prefix(1))
+        let dateOfBirth = fixNumericOCR(String(line2.dropFirst(13).prefix(6)))
+        let dobCheck = fixNumericOCR(String(line2.dropFirst(19).prefix(1)))
         let sex = String(line2.dropFirst(20).prefix(1))
-        let expirationDate = String(line2.dropFirst(21).prefix(6))
-        let expCheck = String(line2.dropFirst(27).prefix(1))
+        let expirationDate = fixNumericOCR(String(line2.dropFirst(21).prefix(6)))
+        let expCheck = fixNumericOCR(String(line2.dropFirst(27).prefix(1)))
         let optionalData1 = String(line2.dropFirst(28).prefix(7)).replacingOccurrences(of: "<", with: "")
 
         // Validate check digits
@@ -326,14 +332,14 @@ final class MRZReader {
         let line2Start = text.index(text.startIndex, offsetBy: 44)
         let line2 = String(text[line2Start...])
 
-        let documentNumber = String(line2.prefix(9)).replacingOccurrences(of: "<", with: "")
-        let docNumCheck = String(line2.dropFirst(9).prefix(1))
+        let documentNumber = fixNumericOCR(String(line2.prefix(9)).replacingOccurrences(of: "<", with: ""))
+        let docNumCheck = fixNumericOCR(String(line2.dropFirst(9).prefix(1)))
         let nationality = String(line2.dropFirst(10).prefix(3))
-        let dateOfBirth = String(line2.dropFirst(13).prefix(6))
-        let dobCheck = String(line2.dropFirst(19).prefix(1))
+        let dateOfBirth = fixNumericOCR(String(line2.dropFirst(13).prefix(6)))
+        let dobCheck = fixNumericOCR(String(line2.dropFirst(19).prefix(1)))
         let sex = String(line2.dropFirst(20).prefix(1))
-        let expirationDate = String(line2.dropFirst(21).prefix(6))
-        let expCheck = String(line2.dropFirst(27).prefix(1))
+        let expirationDate = fixNumericOCR(String(line2.dropFirst(21).prefix(6)))
+        let expCheck = fixNumericOCR(String(line2.dropFirst(27).prefix(1)))
         let optionalData1 = String(line2.dropFirst(28).prefix(14)).replacingOccurrences(of: "<", with: "")
 
         // Validate check digits

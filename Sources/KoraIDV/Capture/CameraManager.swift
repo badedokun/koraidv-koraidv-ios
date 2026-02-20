@@ -32,6 +32,12 @@ final class CameraManager: NSObject {
 
     private var isConfigured = false
 
+    deinit {
+        if captureSession.isRunning {
+            captureSession.stopRunning()
+        }
+    }
+
     /// Preview layer for displaying camera feed
     var previewLayer: AVCaptureVideoPreviewLayer?
 

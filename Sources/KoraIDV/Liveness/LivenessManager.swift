@@ -35,19 +35,44 @@ final class LivenessManager: NSObject {
     private let cameraManager = CameraManager()
     private let faceDetector = FaceDetector()
     private let challengeDetector = ChallengeDetector()
+    private let ciContext = CIContext()
+
+    /// Serial queue to protect mutable state from data races
+    private let stateQueue = DispatchQueue(label: "com.koraidv.liveness.state")
 
     private var session: LivenessSession?
-    private var currentChallengeIndex = 0
-    private var challengeResults: [ChallengeResultItem] = []
-    private var isProcessing = false
+    private var _currentChallengeIndex = 0
+    private var _challengeResults: [ChallengeResultItem] = []
+    private var _isProcessing = false
+
+    /// Thread-safe access to currentChallengeIndex
+    private var currentChallengeIndex: Int {
+        get { stateQueue.sync { _currentChallengeIndex } }
+        set { stateQueue.sync { _currentChallengeIndex = newValue } }
+    }
+
+    /// Thread-safe access to isProcessing
+    private var isProcessing: Bool {
+        get { stateQueue.sync { _isProcessing } }
+        set { stateQueue.sync { _isProcessing = newValue } }
+    }
+
+    /// Thread-safe append to challengeResults
+    private func appendChallengeResult(_ result: ChallengeResultItem) {
+        stateQueue.sync { _challengeResults.append(result) }
+    }
+
+    /// Thread-safe read of challengeResults
+    private var challengeResults: [ChallengeResultItem] {
+        stateQueue.sync { _challengeResults }
+    }
 
     /// Current challenge being processed
     var currentChallenge: LivenessChallenge? {
-        guard let session = session,
-              currentChallengeIndex < session.challenges.count else {
-            return nil
-        }
-        return session.challenges[currentChallengeIndex]
+        guard let session = session else { return nil }
+        let index = currentChallengeIndex
+        guard index < session.challenges.count else { return nil }
+        return session.challenges[index]
     }
 
     // MARK: - Public Methods
@@ -55,8 +80,11 @@ final class LivenessManager: NSObject {
     /// Start liveness session
     func start(session: LivenessSession, completion: @escaping (Result<Void, KoraError>) -> Void) {
         self.session = session
-        self.currentChallengeIndex = 0
-        self.challengeResults = []
+        stateQueue.sync {
+            _currentChallengeIndex = 0
+            _challengeResults = []
+            _isProcessing = false
+        }
 
         // Configure face detector for liveness
         faceDetector.detectLandmarks = true
@@ -96,7 +124,7 @@ final class LivenessManager: NSObject {
             confidence: 0,
             imageData: nil
         )
-        challengeResults.append(result)
+        appendChallengeResult(result)
 
         delegate?.livenessManager(self, didCompleteChallenge: challenge, passed: false)
         moveToNextChallenge()
@@ -175,9 +203,8 @@ final class LivenessManager: NSObject {
         }
 
         let ciImage = CIImage(cvPixelBuffer: imageBuffer)
-        let context = CIContext()
 
-        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else {
+        guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else {
             recordChallengeResult(challenge: challenge, passed: false, confidence: 0, imageData: nil)
             return
         }
@@ -205,7 +232,7 @@ final class LivenessManager: NSObject {
             confidence: confidence,
             imageData: imageData
         )
-        challengeResults.append(result)
+        appendChallengeResult(result)
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }

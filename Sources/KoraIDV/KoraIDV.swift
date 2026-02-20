@@ -11,23 +11,43 @@ public final class KoraIDV {
 
     // MARK: - Properties
 
-    private var configuration: Configuration?
-    private var sessionManager: SessionManager?
+    /// Immutable snapshot of SDK state for atomic reads
+    private struct SdkState {
+        let configuration: Configuration
+        let sessionManager: SessionManager
+    }
+
+    /// Serial queue protecting mutable state
+    private let stateQueue = DispatchQueue(label: "com.koraidv.state")
+
+    /// Atomic state — always read/written under stateQueue
+    private var _state: SdkState?
 
     private init() {}
+
+    // MARK: - Thread-Safe State Access
+
+    /// Read the current SDK state atomically
+    private var state: SdkState? {
+        stateQueue.sync { _state }
+    }
 
     // MARK: - Configuration
 
     /// Configure the SDK with the provided configuration
     /// - Parameter configuration: The SDK configuration
     public static func configure(with configuration: Configuration) {
-        shared.configuration = configuration
-        shared.sessionManager = SessionManager(configuration: configuration)
+        shared.stateQueue.sync {
+            shared._state = SdkState(
+                configuration: configuration,
+                sessionManager: SessionManager(configuration: configuration)
+            )
+        }
     }
 
     /// Check if the SDK is configured
     public static var isConfigured: Bool {
-        shared.configuration != nil
+        shared.state != nil
     }
 
     // MARK: - Verification
@@ -44,12 +64,7 @@ public final class KoraIDV {
         from presenter: UIViewController,
         completion: @escaping (VerificationResult) -> Void
     ) {
-        guard let config = shared.configuration else {
-            completion(.failure(KoraError.notConfigured))
-            return
-        }
-
-        guard let sessionManager = shared.sessionManager else {
+        guard let currentState = shared.state else {
             completion(.failure(KoraError.notConfigured))
             return
         }
@@ -59,14 +74,14 @@ public final class KoraIDV {
             tier: tier.rawValue
         )
 
-        sessionManager.createVerification(request: request) { result in
+        currentState.sessionManager.createVerification(request: request) { result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let verification):
                     let flowController = VerificationFlowController(
                         verification: verification,
-                        configuration: config,
-                        sessionManager: sessionManager,
+                        configuration: currentState.configuration,
+                        sessionManager: currentState.sessionManager,
                         completion: completion
                     )
                     flowController.start(from: presenter)
@@ -88,24 +103,19 @@ public final class KoraIDV {
         from presenter: UIViewController,
         completion: @escaping (VerificationResult) -> Void
     ) {
-        guard let config = shared.configuration else {
+        guard let currentState = shared.state else {
             completion(.failure(KoraError.notConfigured))
             return
         }
 
-        guard let sessionManager = shared.sessionManager else {
-            completion(.failure(KoraError.notConfigured))
-            return
-        }
-
-        sessionManager.getVerification(id: verificationId) { result in
+        currentState.sessionManager.getVerification(id: verificationId) { result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let verification):
                     let flowController = VerificationFlowController(
                         verification: verification,
-                        configuration: config,
-                        sessionManager: sessionManager,
+                        configuration: currentState.configuration,
+                        sessionManager: currentState.sessionManager,
                         completion: completion
                     )
                     flowController.resume(from: presenter)
@@ -126,8 +136,23 @@ public final class KoraIDV {
 
     /// Reset the SDK configuration
     public static func reset() {
-        shared.configuration = nil
-        shared.sessionManager = nil
+        shared.stateQueue.sync {
+            shared._state = nil
+        }
+    }
+
+    // MARK: - Internal Logging
+
+    /// Whether debug logging is enabled. Safe to call before configuration.
+    internal static var debugLogging: Bool {
+        shared.state?.configuration.debugLogging ?? false
+    }
+
+    /// Log a debug message. Only prints when debugLogging is enabled.
+    internal static func log(_ message: @autoclosure () -> String) {
+        if debugLogging {
+            print("[KoraIDV] \(message())")
+        }
     }
 }
 

@@ -1,4 +1,5 @@
 import Foundation
+import CommonCrypto
 
 /// HTTP methods
 enum HTTPMethod: String {
@@ -43,12 +44,12 @@ enum APIEndpoint {
 }
 
 /// API Client for Kora IDV
-final class APIClient {
+final class APIClient: NSObject, URLSessionDelegate {
 
     // MARK: - Properties
 
     private let configuration: Configuration
-    private let session: URLSession
+    private var session: URLSession!
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
 
@@ -58,15 +59,22 @@ final class APIClient {
     /// Base delay for exponential backoff (seconds)
     private let baseDelay: TimeInterval = 1.0
 
+    /// SHA-256 hashes of pinned certificate public keys (ISRG Root X1 and X2)
+    private static let pinnedKeyHashes: Set<String> = [
+        "jQJTbIh0grw0/1TkHSumWb+Fs0Ggogr621gT3PvPKG0=", // ISRG Root X1
+        "C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M="  // ISRG Root X2
+    ]
+
+    /// Hosts that require certificate pinning
+    private static let pinnedHosts: Set<String> = [
+        "api.koraidv.com",
+        "sandbox-api.koraidv.com"
+    ]
+
     // MARK: - Initialization
 
     init(configuration: Configuration) {
         self.configuration = configuration
-
-        let sessionConfig = URLSessionConfiguration.default
-        sessionConfig.timeoutIntervalForRequest = 30
-        sessionConfig.timeoutIntervalForResource = 60
-        self.session = URLSession(configuration: sessionConfig)
 
         self.decoder = JSONDecoder()
         self.decoder.keyDecodingStrategy = .convertFromSnakeCase
@@ -75,6 +83,73 @@ final class APIClient {
         self.encoder = JSONEncoder()
         self.encoder.keyEncodingStrategy = .convertToSnakeCase
         self.encoder.dateEncodingStrategy = .iso8601
+
+        super.init()
+
+        let sessionConfig = URLSessionConfiguration.default
+        sessionConfig.timeoutIntervalForRequest = 30
+        sessionConfig.timeoutIntervalForResource = 60
+
+        // Enable certificate pinning for production with default base URL
+        if configuration.environment == .production && configuration.baseURL == nil {
+            self.session = URLSession(configuration: sessionConfig, delegate: self, delegateQueue: nil)
+        } else {
+            self.session = URLSession(configuration: sessionConfig)
+        }
+    }
+
+    // MARK: - URLSessionDelegate (Certificate Pinning)
+
+    func urlSession(
+        _ session: URLSession,
+        didReceive challenge: URLAuthenticationChallenge,
+        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+    ) {
+        guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+              let serverTrust = challenge.protectionSpace.serverTrust,
+              Self.pinnedHosts.contains(challenge.protectionSpace.host) else {
+            completionHandler(.performDefaultHandling, nil)
+            return
+        }
+
+        // Evaluate the server trust
+        var error: CFError?
+        guard SecTrustEvaluateWithError(serverTrust, &error) else {
+            completionHandler(.cancelAuthenticationChallenge, nil)
+            return
+        }
+
+        // Check each certificate in the chain for a pinned public key
+        let certificateCount = SecTrustGetCertificateCount(serverTrust)
+        var pinMatched = false
+
+        for index in 0..<certificateCount {
+            guard let certificate = SecTrustGetCertificateAtIndex(serverTrust, index) else { continue }
+
+            if let publicKey = SecCertificateCopyKey(certificate),
+               let publicKeyData = SecKeyCopyExternalRepresentation(publicKey, nil) as Data? {
+                let hash = sha256Base64(data: publicKeyData)
+                if Self.pinnedKeyHashes.contains(hash) {
+                    pinMatched = true
+                    break
+                }
+            }
+        }
+
+        if pinMatched {
+            completionHandler(.useCredential, URLCredential(trust: serverTrust))
+        } else {
+            completionHandler(.cancelAuthenticationChallenge, nil)
+        }
+    }
+
+    /// Compute SHA-256 hash and return Base64 encoded string
+    private func sha256Base64(data: Data) -> String {
+        var hash = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
+        data.withUnsafeBytes { buffer in
+            _ = CC_SHA256(buffer.baseAddress, CC_LONG(data.count), &hash)
+        }
+        return Data(hash).base64EncodedString()
     }
 
     // MARK: - Request Methods
@@ -131,23 +206,23 @@ final class APIClient {
             var body = Data()
 
             // Add image
-            body.append("--\(boundary)\r\n".data(using: .utf8)!)
-            body.append("Content-Disposition: form-data; name=\"image\"; filename=\"image.jpg\"\r\n".data(using: .utf8)!)
-            body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+            body.append(Data("--\(boundary)\r\n".utf8))
+            body.append(Data("Content-Disposition: form-data; name=\"image\"; filename=\"image.jpg\"\r\n".utf8))
+            body.append(Data("Content-Type: image/jpeg\r\n\r\n".utf8))
             body.append(imageData)
-            body.append("\r\n".data(using: .utf8)!)
+            body.append(Data("\r\n".utf8))
 
             // Add metadata if present
             if let metadata = metadata {
                 let metadataData = try encoder.encode(metadata)
-                body.append("--\(boundary)\r\n".data(using: .utf8)!)
-                body.append("Content-Disposition: form-data; name=\"metadata\"\r\n".data(using: .utf8)!)
-                body.append("Content-Type: application/json\r\n\r\n".data(using: .utf8)!)
+                body.append(Data("--\(boundary)\r\n".utf8))
+                body.append(Data("Content-Disposition: form-data; name=\"metadata\"\r\n".utf8))
+                body.append(Data("Content-Type: application/json\r\n\r\n".utf8))
                 body.append(metadataData)
-                body.append("\r\n".data(using: .utf8)!)
+                body.append(Data("\r\n".utf8))
             }
 
-            body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+            body.append(Data("--\(boundary)--\r\n".utf8))
             request.httpBody = body
 
             executeWithRetry(request: request, attempt: 0, completion: completion)
@@ -166,7 +241,7 @@ final class APIClient {
         request.httpMethod = method.rawValue
 
         // Add auth headers
-        request.setValue(configuration.apiKey, forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(configuration.apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue(configuration.tenantId, forHTTPHeaderField: "X-Tenant-ID")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("KoraIDV-iOS/\(KoraIDV.version)", forHTTPHeaderField: "User-Agent")
@@ -180,7 +255,7 @@ final class APIClient {
         completion: @escaping (Result<T, KoraError>) -> Void
     ) {
         if configuration.debugLogging {
-            print("[KoraIDV] Request: \(request.httpMethod ?? "?") \(request.url?.absoluteString ?? "?")")
+            KoraIDV.log("Request: \(request.httpMethod ?? "?") \(request.url?.absoluteString ?? "?")")
         }
 
         let task = session.dataTask(with: request) { [weak self] data, response, error in
@@ -207,9 +282,9 @@ final class APIClient {
             }
 
             if self.configuration.debugLogging {
-                print("[KoraIDV] Response: \(httpResponse.statusCode)")
+                KoraIDV.log("Response: \(httpResponse.statusCode)")
                 if let json = String(data: data, encoding: .utf8) {
-                    print("[KoraIDV] Body: \(json.prefix(500))")
+                    KoraIDV.log("Body: \(json.prefix(500))")
                 }
             }
 
@@ -289,7 +364,7 @@ final class APIClient {
         let retryDelay = delay ?? calculateDelay(attempt: attempt)
 
         if configuration.debugLogging {
-            print("[KoraIDV] Retrying in \(retryDelay)s (attempt \(attempt + 1)/\(maxRetries))")
+            KoraIDV.log("Retrying in \(retryDelay)s (attempt \(attempt + 1)/\(maxRetries))")
         }
 
         DispatchQueue.global().asyncAfter(deadline: .now() + retryDelay) { [weak self] in
