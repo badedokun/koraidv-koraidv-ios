@@ -64,6 +64,8 @@ public final class KoraIDV {
     public static func startVerification(
         externalId: String,
         tier: VerificationTier = .standard,
+        expectedFirstName: String? = nil,
+        expectedLastName: String? = nil,
         from presenter: UIViewController,
         completion: @escaping (VerificationResult) -> Void
     ) {
@@ -74,7 +76,9 @@ public final class KoraIDV {
 
         let request = CreateVerificationRequest(
             externalId: externalId,
-            tier: tier.rawValue
+            tier: tier.rawValue,
+            expectedFirstName: expectedFirstName,
+            expectedLastName: expectedLastName
         )
 
         currentState.sessionManager.createVerification(request: request) { result in
