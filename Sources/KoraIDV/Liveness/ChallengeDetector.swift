@@ -25,8 +25,8 @@ final class ChallengeDetector {
     /// Smile detection threshold
     private let smileThreshold: Float = 0.3
 
-    /// Head turn threshold (radians)
-    private let turnThreshold: Float = 0.25
+    /// Head turn threshold (radians) — relaxed for front-camera jitter
+    private let turnThreshold: Float = 0.17
 
     /// Head nod threshold (radians)
     private let nodThreshold: Float = 0.15
