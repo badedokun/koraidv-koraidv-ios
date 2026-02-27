@@ -32,7 +32,7 @@ Add the following to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/badedokun/koraidv-koraidv-ios.git", from: "1.0.0")
+    .package(url: "https://github.com/badedokun/koraidv-koraidv-ios.git", from: "1.1.0")
 ]
 ```
 
@@ -259,6 +259,11 @@ KoraIDV.resumeVerification(
 ```
 
 ## Changelog
+
+### 1.1.0
+- Added `imagePersisted` field to `DocumentUploadResponse`, `SelfieUploadResponse`, and `LivenessChallengeResponse`
+- Confirms whether captured images were durably stored server-side for regulatory compliance
+- Aligned version numbering with Android SDK
 
 ### 1.0.1
 - Added `baseURL` configuration option for custom API endpoint override
