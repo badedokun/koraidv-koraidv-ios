@@ -15,7 +15,7 @@ Native iOS SDK for identity verification with document capture, selfie capture, 
 Add to your `Podfile`:
 
 ```ruby
-pod 'KoraIDV', :git => 'https://github.com/badedokun/koraidv-koraidv-ios.git', :commit => '8f2b2ad'
+pod 'KoraIDV', :git => 'https://github.com/badedokun/koraidv-koraidv-ios.git', :tag => 'v1.1.0'
 ```
 
 Then run:
@@ -257,6 +257,140 @@ KoraIDV.resumeVerification(
     }
 }
 ```
+
+## Image Persistence & Compliance (v1.1.0+)
+
+Starting with v1.1.0, KoraIDV automatically persists all captured images (document front/back, selfie, liveness frames) to secure cloud storage as part of the verification pipeline. This is required for regulatory compliance — regulators (FinCEN, state MSB examiners) can request examination of original identity documents at any time.
+
+### How It Works
+
+Image persistence is **fully automatic** and requires no changes to your integration. When your end-user captures a document, takes a selfie, or completes a liveness challenge, the image is uploaded to KoraIDV's secure storage before the response is returned.
+
+Each upload response now includes an `imagePersisted` field confirming durable storage:
+
+```swift
+// The SDK handles this internally — these are the server response models
+// DocumentUploadResponse.imagePersisted  → Bool?
+// SelfieUploadResponse.imagePersisted    → Bool?
+// LivenessChallengeResponse.imagePersisted → Bool?
+```
+
+- `true` — Image was successfully persisted to cloud storage
+- `false` or `nil` — Image was not stored (sandbox mode, or server not configured)
+
+### Retrieving Images for Your Compliance Dashboard
+
+To display captured images in your own admin/compliance dashboard, use the tenant-scoped image retrieval API. These endpoints are authenticated with your tenant credentials and scoped to your verifications only.
+
+#### Step 1: List Available Images
+
+```swift
+// GET /api/v1/verifications/{verificationId}/images
+// Header: X-Tenant-ID: {your-tenant-uuid}
+
+// Response:
+// {
+//   "images": [
+//     { "type": "document_front", "available": true },
+//     { "type": "document_back", "available": true },
+//     { "type": "selfie", "available": true },
+//     { "type": "liveness_blink", "available": true }
+//   ]
+// }
+```
+
+#### Step 2: Get a Signed URL for Each Image
+
+```swift
+// GET /api/v1/verifications/{verificationId}/images/{imageType}
+// Header: X-Tenant-ID: {your-tenant-uuid}
+
+// Response:
+// {
+//   "imageType": "document_front",
+//   "url": "https://storage.googleapis.com/...",
+//   "expiresIn": 900
+// }
+```
+
+The signed URL is valid for **15 minutes**. Load it directly in a `UIImageView`, `AsyncImage`, or web view. Request a new URL after expiry.
+
+#### Valid Image Types
+
+| Image Type | Description |
+|------------|-------------|
+| `document_front` | Front of the identity document |
+| `document_back` | Back of the identity document |
+| `selfie` | Selfie photo |
+| `liveness_blink` | Liveness challenge: blink |
+| `liveness_smile` | Liveness challenge: smile |
+| `liveness_turn_left` | Liveness challenge: turn left |
+| `liveness_turn_right` | Liveness challenge: turn right |
+| `liveness_nod_up` | Liveness challenge: nod up |
+| `liveness_nod_down` | Liveness challenge: nod down |
+
+#### Example: Display Images in a Swift Admin App
+
+```swift
+import Foundation
+
+struct ImageInfo: Decodable {
+    let type: String
+    let available: Bool
+}
+
+struct ImageURL: Decodable {
+    let imageType: String
+    let url: String
+    let expiresIn: Int
+}
+
+class ComplianceImageService {
+    let baseURL: URL
+    let tenantId: String
+
+    init(baseURL: URL, tenantId: String) {
+        self.baseURL = baseURL
+        self.tenantId = tenantId
+    }
+
+    /// Fetch the list of available images for a verification
+    func listImages(verificationId: String) async throws -> [ImageInfo] {
+        var request = URLRequest(url: baseURL.appendingPathComponent(
+            "api/v1/verifications/\(verificationId)/images"))
+        request.setValue(tenantId, forHTTPHeaderField: "X-Tenant-ID")
+
+        let (data, _) = try await URLSession.shared.data(for: request)
+        let response = try JSONDecoder().decode([String: [ImageInfo]].self, from: data)
+        return response["images"] ?? []
+    }
+
+    /// Get a signed URL for a specific image
+    func getImageURL(verificationId: String, imageType: String) async throws -> ImageURL {
+        var request = URLRequest(url: baseURL.appendingPathComponent(
+            "api/v1/verifications/\(verificationId)/images/\(imageType)"))
+        request.setValue(tenantId, forHTTPHeaderField: "X-Tenant-ID")
+
+        let (data, _) = try await URLSession.shared.data(for: request)
+        return try JSONDecoder().decode(ImageURL.self, from: data)
+    }
+}
+
+// Usage in a SwiftUI view:
+// let service = ComplianceImageService(baseURL: apiURL, tenantId: "your-tenant-uuid")
+// let images = try await service.listImages(verificationId: "ver_xxx")
+// for img in images where img.available {
+//     let signed = try await service.getImageURL(verificationId: "ver_xxx", imageType: img.type)
+//     AsyncImage(url: URL(string: signed.url))
+// }
+```
+
+### Important Notes
+
+- **No backfill:** Only verifications created after v1.1.0 deployment will have stored images.
+- **Sandbox mode:** `imagePersisted` will be `false` in sandbox — images are not stored for synthetic test data.
+- **Tenant isolation:** You can only access images for your own verifications. Cross-tenant access is not possible.
+- **Retention:** Images are retained according to your regulatory requirements (configured server-side).
 
 ## Changelog
 
