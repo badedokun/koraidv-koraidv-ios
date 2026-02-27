@@ -38,6 +38,9 @@ public struct Verification: Codable {
     /// Last update timestamp
     public let updatedAt: Date
 
+    /// Backend verification scores (0-100 scale)
+    public let scores: VerificationScores?
+
     /// Completion timestamp
     public let completedAt: Date?
 }
@@ -90,6 +93,18 @@ public struct ChallengeResult: Codable {
     public let confidence: Double
 }
 
+/// Backend verification scores (0-100 scale)
+public struct VerificationScores: Codable {
+    public let documentQuality: Double
+    public let documentAuth: Double
+    public let faceMatch: Double
+    public let liveness: Double
+    public let nameMatch: Double
+    public let dataConsistency: Double
+    public let screening: Double
+    public let overall: Double
+}
+
 /// Risk signal
 public struct RiskSignal: Codable {
     public let code: String
@@ -103,6 +118,8 @@ public struct RiskSignal: Codable {
 struct CreateVerificationRequest: Encodable {
     let externalId: String
     let tier: String
+    let expectedFirstName: String?
+    let expectedLastName: String?
 }
 
 /// Document upload response
@@ -112,6 +129,7 @@ struct DocumentUploadResponse: Decodable {
     let qualityScore: Double?
     let qualityIssues: [APIQualityIssue]?
     let extractedData: DocumentVerification?
+    let imagePersisted: Bool?
 }
 
 /// API Quality issue (from server responses)
@@ -128,6 +146,7 @@ struct SelfieUploadResponse: Decodable {
     let faceDetected: Bool
     let qualityScore: Double?
     let qualityIssues: [APIQualityIssue]?
+    let imagePersisted: Bool?
 }
 
 /// Document upload metadata
@@ -173,4 +192,5 @@ struct LivenessChallengeResponse: Decodable {
     let challengePassed: Bool
     let confidence: Double
     let remainingChallenges: Int
+    let imagePersisted: Bool?
 }

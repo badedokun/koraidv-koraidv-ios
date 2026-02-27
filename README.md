@@ -32,7 +32,7 @@ Add the following to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/badedokun/koraidv-koraidv-ios.git", from: "1.0.0")
+    .package(url: "https://github.com/badedokun/koraidv-koraidv-ios.git", from: "1.1.0")
 ]
 ```
 
@@ -96,6 +96,7 @@ KoraIDV.resumeVerification(
 | `apiKey` | String | Your Kora IDV API key (required, starts with `kora_`) |
 | `tenantId` | String | Your tenant UUID (required) |
 | `environment` | APIEnvironment | `.production` or `.sandbox` |
+| `baseURL` | URL? | Custom base URL override (e.g., for self-hosted deployments) |
 | `documentTypes` | [DocumentType] | Allowed document types |
 | `livenessMode` | LivenessMode | `.passive` or `.active` |
 | `theme` | KoraTheme | UI customization |
@@ -258,6 +259,16 @@ KoraIDV.resumeVerification(
 ```
 
 ## Changelog
+
+### 1.1.0
+- Added `imagePersisted` field to `DocumentUploadResponse`, `SelfieUploadResponse`, and `LivenessChallengeResponse`
+- Confirms whether captured images were durably stored server-side for regulatory compliance
+- Aligned version numbering with Android SDK
+
+### 1.0.1
+- Added `baseURL` configuration option for custom API endpoint override
+- Added `kora_sandbox_` API key prefix detection for automatic sandbox environment
+- Fixed API connectivity when using self-hosted or Cloud Run deployments
 
 ### 1.0.0 (8f2b2ad)
 - Initial release

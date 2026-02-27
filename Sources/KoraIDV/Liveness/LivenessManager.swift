@@ -20,7 +20,7 @@ struct ChallengeResultItem {
 protocol LivenessManagerDelegate: AnyObject {
     func livenessManager(_ manager: LivenessManager, didStartChallenge challenge: LivenessChallenge)
     func livenessManager(_ manager: LivenessManager, didUpdateProgress progress: Float, for challenge: LivenessChallenge)
-    func livenessManager(_ manager: LivenessManager, didCompleteChallenge challenge: LivenessChallenge, passed: Bool)
+    func livenessManager(_ manager: LivenessManager, didCompleteChallenge challenge: LivenessChallenge, passed: Bool, imageData: Data?)
     func livenessManager(_ manager: LivenessManager, didComplete result: LivenessResult)
     func livenessManager(_ manager: LivenessManager, didFail error: KoraError)
 }
@@ -35,28 +35,74 @@ final class LivenessManager: NSObject {
     private let cameraManager = CameraManager()
     private let faceDetector = FaceDetector()
     private let challengeDetector = ChallengeDetector()
+    private let antiSpoofCheck = AntiSpoofCheck()
+    private let ciContext = CIContext()
 
-    private var session: LivenessSession?
-    private var currentChallengeIndex = 0
-    private var challengeResults: [ChallengeResultItem] = []
-    private var isProcessing = false
+    /// Serial queue to protect mutable state from data races
+    private let stateQueue = DispatchQueue(label: "com.koraidv.liveness.state")
+
+    private var _session: LivenessSession?
+    private var _currentChallengeIndex = 0
+    private var _challengeResults: [ChallengeResultItem] = []
+    private var _isProcessing = false
+    private var _frameCount = 0
+    private let maxFramesPerChallenge = 300
+
+    /// Thread-safe access to currentChallengeIndex
+    private var currentChallengeIndex: Int {
+        get { stateQueue.sync { _currentChallengeIndex } }
+        set { stateQueue.sync { _currentChallengeIndex = newValue } }
+    }
+
+    /// Thread-safe access to isProcessing
+    private var isProcessing: Bool {
+        get { stateQueue.sync { _isProcessing } }
+        set { stateQueue.sync { _isProcessing = newValue } }
+    }
+
+    /// Thread-safe access to frameCount
+    private var frameCount: Int {
+        get { stateQueue.sync { _frameCount } }
+        set { stateQueue.sync { _frameCount = newValue } }
+    }
+
+    /// Thread-safe append to challengeResults
+    private func appendChallengeResult(_ result: ChallengeResultItem) {
+        stateQueue.sync { _challengeResults.append(result) }
+    }
+
+    /// Thread-safe read of challengeResults
+    private var challengeResults: [ChallengeResultItem] {
+        stateQueue.sync { _challengeResults }
+    }
+
+    /// Thread-safe access to session
+    private var session: LivenessSession? {
+        get { stateQueue.sync { _session } }
+        set { stateQueue.sync { _session = newValue } }
+    }
 
     /// Current challenge being processed
     var currentChallenge: LivenessChallenge? {
-        guard let session = session,
-              currentChallengeIndex < session.challenges.count else {
-            return nil
+        return stateQueue.sync {
+            guard let session = _session else { return nil }
+            let index = _currentChallengeIndex
+            guard index < session.challenges.count else { return nil }
+            return session.challenges[index]
         }
-        return session.challenges[currentChallengeIndex]
     }
 
     // MARK: - Public Methods
 
     /// Start liveness session
     func start(session: LivenessSession, completion: @escaping (Result<Void, KoraError>) -> Void) {
-        self.session = session
-        self.currentChallengeIndex = 0
-        self.challengeResults = []
+        stateQueue.sync {
+            _session = session
+            _currentChallengeIndex = 0
+            _challengeResults = []
+            _isProcessing = false
+            _frameCount = 0
+        }
 
         // Configure face detector for liveness
         faceDetector.detectLandmarks = true
@@ -78,7 +124,7 @@ final class LivenessManager: NSObject {
     func stop() {
         cameraManager.stop()
         challengeDetector.reset()
-        session = nil
+        stateQueue.sync { _session = nil }
     }
 
     /// Get preview layer
@@ -96,9 +142,9 @@ final class LivenessManager: NSObject {
             confidence: 0,
             imageData: nil
         )
-        challengeResults.append(result)
+        appendChallengeResult(result)
 
-        delegate?.livenessManager(self, didCompleteChallenge: challenge, passed: false)
+        delegate?.livenessManager(self, didCompleteChallenge: challenge, passed: false, imageData: nil)
         moveToNextChallenge()
     }
 
@@ -111,6 +157,7 @@ final class LivenessManager: NSObject {
         }
 
         challengeDetector.reset()
+        stateQueue.sync { _frameCount = 0 }
         challengeDetector.startDetecting(challengeType: challenge.type)
 
         delegate?.livenessManager(self, didStartChallenge: challenge)
@@ -139,6 +186,13 @@ final class LivenessManager: NSObject {
 
     private func processFrame(_ sampleBuffer: CMSampleBuffer) {
         guard !isProcessing, let challenge = currentChallenge else { return }
+
+        // Enforce per-challenge frame budget
+        guard frameCount < maxFramesPerChallenge else {
+            recordChallengeResult(challenge: challenge, passed: false, confidence: 0, imageData: nil)
+            return
+        }
+        frameCount += 1
         isProcessing = true
 
         faceDetector.detectFaces(in: sampleBuffer) { [weak self] result in
@@ -175,14 +229,21 @@ final class LivenessManager: NSObject {
         }
 
         let ciImage = CIImage(cvPixelBuffer: imageBuffer)
-        let context = CIContext()
 
-        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else {
+        guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else {
             recordChallengeResult(challenge: challenge, passed: false, confidence: 0, imageData: nil)
             return
         }
 
         let image = UIImage(cgImage: cgImage)
+
+        // Run anti-spoof check on captured frame
+        let spoofResult = antiSpoofCheck.analyze(image)
+        if !spoofResult.isLikelyReal {
+            recordChallengeResult(challenge: challenge, passed: false, confidence: 0, imageData: nil)
+            return
+        }
+
         let imageData = image.jpegData(compressionQuality: 0.8)
 
         recordChallengeResult(
@@ -205,11 +266,11 @@ final class LivenessManager: NSObject {
             confidence: confidence,
             imageData: imageData
         )
-        challengeResults.append(result)
+        appendChallengeResult(result)
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.delegate?.livenessManager(self, didCompleteChallenge: challenge, passed: passed)
+            self.delegate?.livenessManager(self, didCompleteChallenge: challenge, passed: passed, imageData: imageData)
             self.moveToNextChallenge()
         }
     }

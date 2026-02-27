@@ -15,9 +15,12 @@ final class DocumentScanner {
 
     // MARK: - Properties
 
+    /// Cached CIContext for image processing (expensive to create)
+    private let ciContext = CIContext()
+
     private var lastObservation: VNRectangleObservation?
     private var stabilityCounter = 0
-    private let stabilityThreshold = 5
+    private let stabilityThreshold = 2
 
     /// Minimum confidence for document detection
     var minimumConfidence: Float = 0.7
@@ -36,7 +39,7 @@ final class DocumentScanner {
             guard let self = self else { return }
 
             if let error = error {
-                print("[KoraIDV] Document detection error: \(error)")
+                KoraIDV.log("Document detection error: \(error)")
                 completion(nil)
                 return
             }
@@ -86,7 +89,7 @@ final class DocumentScanner {
         do {
             try handler.perform([request])
         } catch {
-            print("[KoraIDV] Vision request failed: \(error)")
+            KoraIDV.log("Vision request failed: \(error)")
             completion(nil)
         }
     }
@@ -116,7 +119,7 @@ final class DocumentScanner {
             guard let self = self else { return }
 
             if let error = error {
-                print("[KoraIDV] Document detection error: \(error)")
+                KoraIDV.log("Document detection error: \(error)")
                 completion(nil)
                 return
             }
@@ -153,7 +156,7 @@ final class DocumentScanner {
         do {
             try handler.perform([request])
         } catch {
-            print("[KoraIDV] Vision request failed: \(error)")
+            KoraIDV.log("Vision request failed: \(error)")
             completion(nil)
         }
     }
@@ -195,8 +198,7 @@ final class DocumentScanner {
 
         guard let outputImage = filter.outputImage else { return nil }
 
-        let context = CIContext()
-        guard let cgImage = context.createCGImage(outputImage, from: outputImage.extent) else { return nil }
+        guard let cgImage = ciContext.createCGImage(outputImage, from: outputImage.extent) else { return nil }
 
         return UIImage(cgImage: cgImage)
     }
@@ -234,8 +236,7 @@ final class DocumentScanner {
 
         guard let outputImage = filter.outputImage else { return nil }
 
-        let context = CIContext()
-        guard let cgImage = context.createCGImage(outputImage, from: outputImage.extent) else { return nil }
+        guard let cgImage = ciContext.createCGImage(outputImage, from: outputImage.extent) else { return nil }
 
         return UIImage(cgImage: cgImage)
     }
