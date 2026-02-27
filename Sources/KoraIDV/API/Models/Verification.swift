@@ -129,6 +129,7 @@ struct DocumentUploadResponse: Decodable {
     let qualityScore: Double?
     let qualityIssues: [APIQualityIssue]?
     let extractedData: DocumentVerification?
+    let imagePersisted: Bool?
 }
 
 /// API Quality issue (from server responses)
@@ -145,6 +146,7 @@ struct SelfieUploadResponse: Decodable {
     let faceDetected: Bool
     let qualityScore: Double?
     let qualityIssues: [APIQualityIssue]?
+    let imagePersisted: Bool?
 }
 
 /// Document upload metadata
@@ -190,4 +192,5 @@ struct LivenessChallengeResponse: Decodable {
     let challengePassed: Bool
     let confidence: Double
     let remainingChallenges: Int
+    let imagePersisted: Bool?
 }
