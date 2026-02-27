@@ -46,7 +46,7 @@ final class LivenessManager: NSObject {
     private var _challengeResults: [ChallengeResultItem] = []
     private var _isProcessing = false
     private var _frameCount = 0
-    private let maxFramesPerChallenge = 30
+    private let maxFramesPerChallenge = 300
 
     /// Thread-safe access to currentChallengeIndex
     private var currentChallengeIndex: Int {

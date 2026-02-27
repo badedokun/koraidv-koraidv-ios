@@ -20,7 +20,7 @@ final class DocumentScanner {
 
     private var lastObservation: VNRectangleObservation?
     private var stabilityCounter = 0
-    private let stabilityThreshold = 5
+    private let stabilityThreshold = 2
 
     /// Minimum confidence for document detection
     var minimumConfidence: Float = 0.7
