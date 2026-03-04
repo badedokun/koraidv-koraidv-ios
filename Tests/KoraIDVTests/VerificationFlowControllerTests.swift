@@ -28,6 +28,7 @@ final class VerificationFlowControllerTests: XCTestCase {
             riskScore: nil,
             createdAt: Date(),
             updatedAt: Date(),
+            scores: nil,
             completedAt: nil
         )
     }
@@ -73,6 +74,7 @@ final class VerificationFlowControllerTests: XCTestCase {
             riskScore: riskScore,
             createdAt: Date(),
             updatedAt: Date(),
+            scores: nil,
             completedAt: Date()
         )
     }

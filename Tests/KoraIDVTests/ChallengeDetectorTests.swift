@@ -573,12 +573,12 @@ final class ChallengeDetectorTests: XCTestCase {
     // MARK: - Edge Case Tests
 
     func testTurnDetectionWithExactThreshold() {
-        // Delta exactly at threshold (0.25) should NOT trigger detection
+        // Delta exactly at threshold (0.17) should NOT trigger detection
         // because the check is delta > turnThreshold (strict greater than)
         let baselineFace = makeFace(yaw: 0.0, landmarks: makeLandmarks())
         _ = detector.process(face: baselineFace, challengeType: .turnLeft)
 
-        let edgeFace = makeFace(yaw: 0.25, landmarks: makeLandmarks())
+        let edgeFace = makeFace(yaw: 0.17, landmarks: makeLandmarks())
         for _ in 0..<10 {
             let result = detector.process(face: edgeFace, challengeType: .turnLeft)
             XCTAssertFalse(result.completed,

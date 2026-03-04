@@ -189,6 +189,20 @@ final class VerificationFlowController {
         guard let documentType = selectedDocumentType else { return }
         currentStep = .documentBack
 
+        // Show flip instruction before back capture
+        let flipView = FlipDocumentView(
+            onContinue: { [weak self] in
+                self?.showDocumentBackCapture(documentType: documentType)
+            },
+            onCancel: { [weak self] in
+                self?.cancel()
+            }
+        )
+
+        pushView(flipView)
+    }
+
+    private func showDocumentBackCapture(documentType: DocumentType) {
         let captureView = DocumentCaptureView(
             documentType: documentType,
             side: .back,

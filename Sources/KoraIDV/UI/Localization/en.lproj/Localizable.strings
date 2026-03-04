@@ -37,6 +37,12 @@
 "koraidv.capture.retake" = "Retake";
 "koraidv.capture.looks_good" = "Looks good";
 
+/* FlipDocumentView */
+"koraidv.flip.title" = "Flip your document";
+"koraidv.flip.heading" = "Now capture the back";
+"koraidv.flip.description" = "Turn your document over to the back side, then tap continue to take a photo.";
+"koraidv.flip.continue" = "Continue";
+
 /* SelfieCaptureView */
 "koraidv.selfie.title" = "Selfie";
 "koraidv.selfie.face_camera" = "Face the camera";

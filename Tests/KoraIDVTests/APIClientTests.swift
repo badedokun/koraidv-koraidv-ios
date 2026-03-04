@@ -175,7 +175,7 @@ final class APIClientTests: XCTestCase {
             return (self.makeResponse(statusCode: 200, url: request.url), self.makeJSON(["id": "v1", "external_id": "ext", "tenant_id": "t", "tier": "standard", "status": "pending", "created_at": "2025-01-01T00:00:00Z", "updated_at": "2025-01-01T00:00:00Z"]))
         }
 
-        let body = CreateVerificationRequest(externalId: "ext", tier: "standard")
+        let body = CreateVerificationRequest(externalId: "ext", tier: "standard", expectedFirstName: nil, expectedLastName: nil)
         apiClient.request(endpoint: .createVerification, method: .post, body: body) { (result: Result<Verification, KoraError>) in
             expectation.fulfill()
         }
@@ -191,7 +191,7 @@ final class APIClientTests: XCTestCase {
             return (self.makeResponse(statusCode: 200, url: request.url), self.makeJSON(["id": "v1", "external_id": "ext", "tenant_id": "t", "tier": "standard", "status": "pending", "created_at": "2025-01-01T00:00:00Z", "updated_at": "2025-01-01T00:00:00Z"]))
         }
 
-        let body = CreateVerificationRequest(externalId: "ext", tier: "standard")
+        let body = CreateVerificationRequest(externalId: "ext", tier: "standard", expectedFirstName: nil, expectedLastName: nil)
         apiClient.request(endpoint: .createVerification, method: .post, body: body) { (result: Result<Verification, KoraError>) in
             expectation.fulfill()
         }
@@ -401,7 +401,7 @@ final class APIClientTests: XCTestCase {
             return (self.makeResponse(statusCode: 503), Data())
         }
 
-        let body = CreateVerificationRequest(externalId: "ext", tier: "standard")
+        let body = CreateVerificationRequest(externalId: "ext", tier: "standard", expectedFirstName: nil, expectedLastName: nil)
         apiClient.request(endpoint: .createVerification, method: .post, body: body) { (result: Result<Verification, KoraError>) in
             XCTAssertEqual(requestCount, 1, "POST should not be retried on 5xx")
             expectation.fulfill()
