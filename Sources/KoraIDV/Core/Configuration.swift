@@ -126,8 +126,21 @@ public enum DocumentType: String, CaseIterable, Codable {
     // Africa
     case ghanaCard = "ghana_card"
     case nigeriaNin = "ng_nin"
+    case nigeriaDriversLicense = "ng_drivers_license"
+    case ghanaDriversLicense = "gh_drivers_license"
     case kenyaId = "ke_id"
+    case kenyaDriversLicense = "ke_drivers_license"
     case southAfricaId = "za_id"
+    case southAfricaDriversLicense = "za_drivers_license"
+
+    // UK
+    case ukDriversLicense = "uk_drivers_license"
+
+    // Canada
+    case canadaDriversLicense = "ca_drivers_license"
+
+    // India
+    case indiaDriversLicense = "in_drivers_license"
 
     /// Display name for the document type
     public var displayName: String {
@@ -142,8 +155,15 @@ public enum DocumentType: String, CaseIterable, Codable {
         case .euIdItaly: return "National ID Card (Italy)"
         case .ghanaCard: return "Ghana Card"
         case .nigeriaNin: return "NIN Slip"
+        case .nigeriaDriversLicense: return "Driver's License"
+        case .ghanaDriversLicense: return "Driver's License"
         case .kenyaId: return "National ID"
+        case .kenyaDriversLicense: return "Driver's License"
         case .southAfricaId: return "Smart ID Card"
+        case .southAfricaDriversLicense: return "Driver's License"
+        case .ukDriversLicense: return "Driver's License"
+        case .canadaDriversLicense: return "Driver's License"
+        case .indiaDriversLicense: return "Driver's License"
         }
     }
 
@@ -167,6 +187,10 @@ public enum DocumentType: String, CaseIterable, Codable {
         case .euIdGermany, .euIdFrance, .euIdSpain, .euIdItaly:
             return true
         case .ghanaCard, .southAfricaId:
+            return true
+        case .nigeriaDriversLicense, .ghanaDriversLicense, .kenyaDriversLicense,
+             .southAfricaDriversLicense, .ukDriversLicense, .canadaDriversLicense,
+             .indiaDriversLicense:
             return true
         default:
             return false
