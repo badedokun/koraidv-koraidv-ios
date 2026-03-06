@@ -142,6 +142,30 @@ public final class KoraIDV {
         }
     }
 
+    // MARK: - Document Quality Check
+
+    /// Check document image quality before uploading (no active verification required)
+    /// - Parameters:
+    ///   - imageData: Raw JPEG image data
+    ///   - documentType: The type of document being checked
+    ///   - completion: Completion handler with the quality result
+    public static func checkDocumentQuality(
+        imageData: Data,
+        documentType: DocumentType,
+        completion: @escaping (Result<DocumentQualityResponse, KoraError>) -> Void
+    ) {
+        guard let currentState = shared.state else {
+            completion(.failure(KoraError.notConfigured))
+            return
+        }
+
+        currentState.sessionManager.checkDocumentQuality(
+            imageData: imageData,
+            documentType: documentType,
+            completion: completion
+        )
+    }
+
     // MARK: - Utilities
 
     /// SDK version

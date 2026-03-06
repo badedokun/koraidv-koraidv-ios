@@ -186,6 +186,27 @@ struct LivenessChallengeMetadata: Encodable {
     let challengeId: String
 }
 
+/// Document quality check request
+struct CheckDocumentQualityRequest: Encodable {
+    let documentFrontBase64: String
+    let documentType: String
+}
+
+/// Document quality check response
+public struct DocumentQualityResponse: Decodable {
+    public let success: Bool
+    public let qualityScore: Double
+    public let qualityIssues: [String]
+    public let details: DocumentQualityDetails?
+}
+
+/// Document quality details
+public struct DocumentQualityDetails: Decodable {
+    public let textReadability: Double
+    public let faceQuality: Double
+    public let imageClarity: Double
+}
+
 /// Liveness challenge response
 struct LivenessChallengeResponse: Decodable {
     let success: Bool

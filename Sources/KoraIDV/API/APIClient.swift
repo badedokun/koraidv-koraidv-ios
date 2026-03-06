@@ -20,6 +20,7 @@ enum APIEndpoint {
     case createLivenessSession(id: String)
     case submitLivenessChallenge(id: String)
     case completeVerification(id: String)
+    case checkDocumentQuality
 
     var path: String {
         switch self {
@@ -39,6 +40,8 @@ enum APIEndpoint {
             return "/verifications/\(id)/liveness/challenge"
         case .completeVerification(let id):
             return "/verifications/\(id)/complete"
+        case .checkDocumentQuality:
+            return "/kyc/document-quality"
         }
     }
 }

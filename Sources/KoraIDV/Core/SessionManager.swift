@@ -84,6 +84,26 @@ public final class SessionManager {
         )
     }
 
+    /// Check document quality before uploading (no active verification required)
+    func checkDocumentQuality(
+        imageData: Data,
+        documentType: DocumentType,
+        completion: @escaping (Result<DocumentQualityResponse, KoraError>) -> Void
+    ) {
+        let base64 = imageData.base64EncodedString()
+        let request = CheckDocumentQualityRequest(
+            documentFrontBase64: base64,
+            documentType: documentType.rawValue
+        )
+
+        apiClient.request(
+            endpoint: .checkDocumentQuality,
+            method: .post,
+            body: request,
+            completion: completion
+        )
+    }
+
     /// Upload selfie image
     func uploadSelfie(
         verificationId: String,
