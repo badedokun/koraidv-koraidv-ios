@@ -107,7 +107,15 @@ public enum APIEnvironment {
 
 // MARK: - Document Types
 
-/// Supported document types
+/// Supported document types.
+///
+/// Maintained for backward compatibility so that existing integrations that
+/// reference specific cases (e.g. `DocumentType.internationalPassport`) continue
+/// to compile. The SDK now fetches the canonical list of document types
+/// dynamically from the API at runtime via `GET /document-types`. Any document
+/// type returned by the API whose raw value does not match a case in this enum
+/// is silently ignored, keeping the SDK forward-compatible when new types are
+/// added on the backend.
 public enum DocumentType: String, CaseIterable, Codable {
     // US Documents
     case usDriversLicense = "us_drivers_license"

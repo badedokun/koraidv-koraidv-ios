@@ -21,6 +21,8 @@ enum APIEndpoint {
     case submitLivenessChallenge(id: String)
     case completeVerification(id: String)
     case checkDocumentQuality
+    case uploadNFCData(id: String)
+    case getDocumentTypes(country: String?)
 
     var path: String {
         switch self {
@@ -42,6 +44,13 @@ enum APIEndpoint {
             return "/verifications/\(id)/complete"
         case .checkDocumentQuality:
             return "/kyc/document-quality"
+        case .uploadNFCData(let id):
+            return "/verifications/\(id)/nfc"
+        case .getDocumentTypes(let country):
+            if let country = country, !country.isEmpty {
+                return "/document-types?country=\(country)"
+            }
+            return "/document-types"
         }
     }
 }

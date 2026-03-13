@@ -152,6 +152,47 @@ public final class SessionManager {
         )
     }
 
+    /// Upload NFC chip data
+    func uploadNFCData(
+        verificationId: String,
+        nfcData: NFCPassportData,
+        completion: @escaping (Result<NFCUploadResponse, KoraError>) -> Void
+    ) {
+        var dg1Hash: String?
+        var dg2Hash: String?
+
+        if let dg1Data = nfcData.dg1Data {
+            dg1Hash = dg1Data.map { String(format: "%02x", $0) }.joined()
+        }
+        if let dg2Data = nfcData.dg2Data {
+            dg2Hash = dg2Data.prefix(32).map { String(format: "%02x", $0) }.joined()
+        }
+
+        let request = NFCUploadRequest(
+            documentNumber: nfcData.documentNumber,
+            firstName: nfcData.firstName,
+            lastName: nfcData.lastName,
+            dateOfBirth: nfcData.dateOfBirth,
+            expirationDate: nfcData.expirationDate,
+            nationality: nfcData.nationality,
+            sex: nfcData.sex,
+            issuingCountry: nfcData.issuingCountry,
+            passiveAuthPassed: nfcData.passiveAuthPassed,
+            activeAuthPassed: nfcData.activeAuthPassed,
+            chipAuthPassed: nfcData.chipAuthPassed,
+            hasFaceImage: nfcData.faceImageData != nil,
+            dg1Hash: dg1Hash,
+            dg2Hash: dg2Hash
+        )
+
+        apiClient.request(
+            endpoint: .uploadNFCData(id: verificationId),
+            method: .post,
+            body: request,
+            completion: completion
+        )
+    }
+
     /// Complete the verification
     func completeVerification(
         verificationId: String,
@@ -166,6 +207,32 @@ public final class SessionManager {
                 self?.currentVerification = verification
             }
             completion(result)
+        }
+    }
+
+    // MARK: - Document Types & Countries
+
+    /// Fetch supported countries and document types from the API.
+    /// Returns an array of `CountryInfo` populated with the document types
+    /// that are both supported by the API and allowed by the SDK configuration.
+    func fetchSupportedCountries(
+        completion: @escaping (Result<[CountryInfo], KoraError>) -> Void
+    ) {
+        apiClient.request(
+            endpoint: .getDocumentTypes(country: nil),
+            method: .get
+        ) { [weak self] (result: Result<DocumentTypesResponse, KoraError>) in
+            switch result {
+            case .success(let response):
+                let configuredTypes = self?.configuration.documentTypes ?? DocumentType.allCases
+                let countries = response.countries
+                    .map { $0.toCountryInfo(documentTypes: response.documentTypes, configuredTypes: configuredTypes) }
+                    .filter { !$0.documentTypes.isEmpty } // Only show countries that have at least one usable doc type
+                completion(.success(countries))
+
+            case .failure(let error):
+                completion(.failure(error))
+            }
         }
     }
 

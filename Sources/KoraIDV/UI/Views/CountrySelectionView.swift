@@ -158,23 +158,3 @@ struct CountrySelectionView: View {
         .background(Color.white)
     }
 }
-
-/// Default countries list
-extension CountrySelectionView {
-    static var defaultCountries: [CountryInfo] {
-        [
-            CountryInfo(id: "US", name: "United States", flagEmoji: "\u{1F1FA}\u{1F1F8}", documentTypes: [.usDriversLicense, .usStateId, .usGreenCard, .internationalPassport]),
-            CountryInfo(id: "GB", name: "United Kingdom", flagEmoji: "\u{1F1EC}\u{1F1E7}", documentTypes: [.ukDriversLicense, .internationalPassport]),
-            CountryInfo(id: "DE", name: "Germany", flagEmoji: "\u{1F1E9}\u{1F1EA}", documentTypes: [.euIdGermany, .internationalPassport]),
-            CountryInfo(id: "FR", name: "France", flagEmoji: "\u{1F1EB}\u{1F1F7}", documentTypes: [.euIdFrance, .internationalPassport]),
-            CountryInfo(id: "ES", name: "Spain", flagEmoji: "\u{1F1EA}\u{1F1F8}", documentTypes: [.euIdSpain, .internationalPassport]),
-            CountryInfo(id: "IT", name: "Italy", flagEmoji: "\u{1F1EE}\u{1F1F9}", documentTypes: [.euIdItaly, .internationalPassport]),
-            CountryInfo(id: "GH", name: "Ghana", flagEmoji: "\u{1F1EC}\u{1F1ED}", documentTypes: [.ghanaCard, .ghanaDriversLicense, .internationalPassport]),
-            CountryInfo(id: "NG", name: "Nigeria", flagEmoji: "\u{1F1F3}\u{1F1EC}", documentTypes: [.nigeriaNin, .nigeriaDriversLicense, .internationalPassport]),
-            CountryInfo(id: "KE", name: "Kenya", flagEmoji: "\u{1F1F0}\u{1F1EA}", documentTypes: [.kenyaId, .kenyaDriversLicense, .internationalPassport]),
-            CountryInfo(id: "ZA", name: "South Africa", flagEmoji: "\u{1F1FF}\u{1F1E6}", documentTypes: [.southAfricaId, .southAfricaDriversLicense, .internationalPassport]),
-            CountryInfo(id: "CA", name: "Canada", flagEmoji: "\u{1F1E8}\u{1F1E6}", documentTypes: [.canadaDriversLicense, .internationalPassport]),
-            CountryInfo(id: "IN", name: "India", flagEmoji: "\u{1F1EE}\u{1F1F3}", documentTypes: [.indiaDriversLicense, .internationalPassport]),
-        ]
-    }
-}

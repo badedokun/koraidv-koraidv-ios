@@ -1,6 +1,9 @@
 import Foundation
 import UIKit
 import SwiftUI
+#if canImport(CoreNFC)
+import CoreNFC
+#endif
 
 /// Controls the verification flow UI and state
 final class VerificationFlowController {
@@ -24,6 +27,8 @@ final class VerificationFlowController {
     private var livenessSession: LivenessSession?
     private var completedChallenges: Set<String> = []
     private var isLoadingPresented = false
+    private var capturedMRZData: MRZData?
+    private var nfcPassportData: NFCPassportData?
 
     // MARK: - Initialization
 
@@ -80,6 +85,13 @@ final class VerificationFlowController {
 
         navigationController = navController
         presenter.present(navController, animated: true)
+
+        // For country selection, the buildViewForStep returns a loading
+        // placeholder. Trigger the actual async fetch now that the nav
+        // controller is presented.
+        if currentStep == .countrySelection {
+            proceedToCountrySelection()
+        }
     }
 
     // MARK: - Step Navigation
@@ -87,8 +99,23 @@ final class VerificationFlowController {
     private func proceedToCountrySelection() {
         currentStep = .countrySelection
 
-        let countries = CountrySelectionView.defaultCountries
+        showLoading(message: "Loading countries...")
 
+        sessionManager.fetchSupportedCountries { [weak self] result in
+            DispatchQueue.main.async {
+                self?.hideLoading()
+
+                switch result {
+                case .success(let countries):
+                    self?.showCountrySelection(countries: countries)
+                case .failure(let error):
+                    self?.showError(error)
+                }
+            }
+        }
+    }
+
+    private func showCountrySelection(countries: [CountryInfo]) {
         let countryView = CountrySelectionView(
             countries: countries,
             onSelect: { [weak self] (country: CountryInfo) in
@@ -166,11 +193,11 @@ final class VerificationFlowController {
                             if documentType.requiresBack {
                                 self?.proceedToDocumentBack()
                             } else {
-                                self?.proceedToSelfieCapture()
+                                self?.proceedAfterDocumentCapture()
                             }
                         } else {
                             self?.documentBackCaptured = true
-                            self?.proceedToSelfieCapture()
+                            self?.proceedAfterDocumentCapture()
                         }
                     } else if let issues = response.qualityIssues, !issues.isEmpty {
                         self?.showQualityError(issues: issues, side: side)
@@ -217,6 +244,101 @@ final class VerificationFlowController {
 
         pushView(captureView)
     }
+
+    /// Determine whether to show NFC step or proceed to selfie after document capture
+    private func proceedAfterDocumentCapture() {
+        if shouldOfferNFC() {
+            proceedToNFCChip()
+        } else {
+            proceedToSelfieCapture()
+        }
+    }
+
+    /// Check if NFC chip reading should be offered
+    private func shouldOfferNFC() -> Bool {
+        // Only for enhanced tier
+        guard verification.tier == VerificationTier.enhanced.rawValue else { return false }
+
+        // Only for documents with MRZ (passports and EU IDs)
+        guard let docType = selectedDocumentType, docType.hasMRZ else { return false }
+
+        // Check device supports NFC ISO 7816 tag reading
+        #if canImport(CoreNFC)
+        if #available(iOS 13.0, *) {
+            return NFCTagReaderSession.readingAvailable
+        }
+        #endif
+
+        return false
+    }
+
+    private func proceedToNFCChip() {
+        #if canImport(CoreNFC)
+        currentStep = .nfcChip
+
+        // We need MRZ data for BAC — attempt to get it from the captured document
+        // If we don't have MRZ data yet, try to read it from the front image
+        if let mrzData = capturedMRZData {
+            showNFCView(mrzData: mrzData)
+        } else {
+            // Skip NFC if no MRZ data available — cannot perform BAC without it
+            KoraIDV.log("No MRZ data available for NFC — skipping")
+            proceedToSelfieCapture()
+        }
+        #else
+        proceedToSelfieCapture()
+        #endif
+    }
+
+    #if canImport(CoreNFC)
+    private func showNFCView(mrzData: MRZData) {
+        let bacKeyData = BACKeyData(
+            documentNumber: mrzData.documentNumber,
+            dateOfBirth: mrzData.dateOfBirth,
+            expirationDate: mrzData.expirationDate
+        )
+
+        let nfcView = NFCPassportView(
+            bacKeyData: bacKeyData,
+            theme: configuration.theme,
+            onSuccess: { [weak self] nfcData in
+                self?.handleNFCSuccess(nfcData: nfcData)
+            },
+            onSkip: { [weak self] in
+                self?.proceedToSelfieCapture()
+            },
+            onCancel: { [weak self] in
+                self?.cancel()
+            }
+        )
+
+        pushView(nfcView)
+    }
+
+    private func handleNFCSuccess(nfcData: NFCPassportData) {
+        self.nfcPassportData = nfcData
+
+        showLoading(message: "Uploading chip data...")
+
+        sessionManager.uploadNFCData(
+            verificationId: verification.id,
+            nfcData: nfcData
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                self?.hideLoading()
+
+                switch result {
+                case .success:
+                    self?.proceedToSelfieCapture()
+                case .failure(let error):
+                    KoraIDV.log("NFC upload failed (non-fatal): \(error.localizedDescription)")
+                    // NFC is optional — proceed to selfie even if upload fails
+                    self?.proceedToSelfieCapture()
+                }
+            }
+        }
+    }
+    #endif
 
     private func proceedToSelfieCapture() {
         currentStep = .selfie
@@ -493,14 +615,9 @@ final class VerificationFlowController {
                 onDecline: { [weak self] in self?.cancel() }
             )
         case .countrySelection:
-            CountrySelectionView(
-                countries: CountrySelectionView.defaultCountries,
-                onSelect: { [weak self] country in
-                    self?.selectedCountry = country
-                    self?.proceedToDocumentSelection(country: country)
-                },
-                onCancel: { [weak self] in self?.cancel() }
-            )
+            // Show a loading screen; the actual country list is fetched
+            // asynchronously via proceedToCountrySelection().
+            LoadingView(message: "Loading countries...")
         case .selfie:
             SelfieCaptureView(
                 theme: configuration.theme,
@@ -543,6 +660,7 @@ private enum VerificationStep {
     case documentSelection
     case documentFront
     case documentBack
+    case nfcChip
     case selfie
     case liveness
     case completing
