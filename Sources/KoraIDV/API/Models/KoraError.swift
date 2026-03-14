@@ -98,6 +98,14 @@ public enum KoraError: LocalizedError {
     /// Face match failed
     case faceMatchFailed
 
+    // MARK: - NFC Errors
+
+    /// NFC not available on this device
+    case nfcNotAvailable
+
+    /// NFC chip reading failed
+    case nfcReadFailed(String)
+
     // MARK: - Liveness Errors
 
     /// Liveness check failed
@@ -183,6 +191,10 @@ public enum KoraError: LocalizedError {
             return "This document type is not supported."
         case .mrzReadFailed:
             return "Could not read document MRZ. Please try again."
+        case .nfcNotAvailable:
+            return "NFC is not available on this device."
+        case .nfcReadFailed(let reason):
+            return "NFC chip reading failed: \(reason)"
         case .faceNotDetected:
             return "Face not detected. Please position your face within the frame."
         case .multipleFacesDetected:
@@ -216,6 +228,8 @@ public enum KoraError: LocalizedError {
             return "Check your Wi-Fi or cellular connection and try again."
         case .timeout, .serverError, .rateLimited:
             return "Please wait a moment and try again."
+        case .nfcReadFailed:
+            return "Hold your phone steady against the passport data page and try again."
         case .documentNotDetected:
             return "Place the document on a flat, well-lit surface and center it in the frame."
         case .faceNotDetected:
@@ -254,6 +268,8 @@ public enum KoraError: LocalizedError {
         case .documentNotDetected: return "DOCUMENT_NOT_DETECTED"
         case .documentTypeNotSupported: return "DOCUMENT_TYPE_NOT_SUPPORTED"
         case .mrzReadFailed: return "MRZ_READ_FAILED"
+        case .nfcNotAvailable: return "NFC_NOT_AVAILABLE"
+        case .nfcReadFailed: return "NFC_READ_FAILED"
         case .faceNotDetected: return "FACE_NOT_DETECTED"
         case .multipleFacesDetected: return "MULTIPLE_FACES_DETECTED"
         case .faceMatchFailed: return "FACE_MATCH_FAILED"
