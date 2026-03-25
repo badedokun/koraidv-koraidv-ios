@@ -120,11 +120,11 @@ final class ConfigurationTests: XCTestCase {
 
     func testProductionEnvironmentBaseURL() {
         let url = APIEnvironment.production.baseURL
-        XCTAssertEqual(url.absoluteString, "https://koraidv-identity-kendyplisq-uc.a.run.app/api/v1")
+        XCTAssertEqual(url.absoluteString, "https://koraidv-identity-14203293608.us-central1.run.app/api/v1")
     }
 
     func testSandboxEnvironmentBaseURL() {
         let url = APIEnvironment.sandbox.baseURL
-        XCTAssertEqual(url.absoluteString, "https://koraidv-identity-kendyplisq-uc.a.run.app/api/v1")
+        XCTAssertEqual(url.absoluteString, "https://koraidv-identity-sandbox-14203293608.us-central1.run.app/api/v1")
     }
 }

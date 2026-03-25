@@ -98,9 +98,9 @@ public enum APIEnvironment {
     var baseURL: URL {
         switch self {
         case .production:
-            return URL(string: "https://koraidv-identity-kendyplisq-uc.a.run.app/api/v1")!
+            return URL(string: "https://koraidv-identity-14203293608.us-central1.run.app/api/v1")!
         case .sandbox:
-            return URL(string: "https://koraidv-identity-kendyplisq-uc.a.run.app/api/v1")!
+            return URL(string: "https://koraidv-identity-sandbox-14203293608.us-central1.run.app/api/v1")!
         }
     }
 }
