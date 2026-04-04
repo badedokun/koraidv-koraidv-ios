@@ -170,7 +170,7 @@ public final class KoraIDV {
 
     /// SDK version
     public static var version: String {
-        "1.0.0"
+        "1.2.0"
     }
 
     /// Reset the SDK configuration

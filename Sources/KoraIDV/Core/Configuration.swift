@@ -98,9 +98,9 @@ public enum APIEnvironment {
     var baseURL: URL {
         switch self {
         case .production:
-            return URL(string: "https://koraidv-identity-14203293608.us-central1.run.app/api/v1")!
+            return URL(string: "https://api.korastratum.com/api/v1/idv")!
         case .sandbox:
-            return URL(string: "https://koraidv-identity-sandbox-14203293608.us-central1.run.app/api/v1")!
+            return URL(string: "https://api.korastratum.com/api/v1/idv")!
         }
     }
 }
@@ -146,9 +146,44 @@ public enum DocumentType: String, CaseIterable, Codable {
 
     // Canada
     case canadaDriversLicense = "ca_drivers_license"
+    case canadaPRCard = "ca_pr_card"
+    case canadaNationalID = "ca_national_id"
 
     // India
     case indiaDriversLicense = "in_drivers_license"
+
+    // Liberia
+    case lrId = "lr_id"
+    case lrDriversLicense = "lr_drivers_license"
+    case lrVotersCard = "lr_voters_card"
+
+    // Sierra Leone
+    case slId = "sl_id"
+    case slDriversLicense = "sl_drivers_license"
+    case slVotersCard = "sl_voters_card"
+
+    // Gambia
+    case gmId = "gm_id"
+    case gmDriversLicense = "gm_drivers_license"
+
+    // Nigeria (additional)
+    case ngVotersCard = "ng_voters_card"
+
+    // UK (additional)
+    case ukBrp = "uk_brp"
+
+    // EU/EEA Residence Permits
+    case deRp = "de_rp"
+    case frRp = "fr_rp"
+    case itRp = "it_rp"
+    case esRp = "es_rp"
+    case ieRp = "ie_rp"
+    case ptRp = "pt_rp"
+    case seRp = "se_rp"
+    case dkRp = "dk_rp"
+    case noRp = "no_rp"
+    case fiRp = "fi_rp"
+    case plRp = "pl_rp"
 
     /// Display name for the document type
     public var displayName: String {
@@ -171,7 +206,30 @@ public enum DocumentType: String, CaseIterable, Codable {
         case .southAfricaDriversLicense: return "Driver's License"
         case .ukDriversLicense: return "Driver's License"
         case .canadaDriversLicense: return "Driver's License"
+        case .canadaPRCard: return "Permanent Resident Card"
+        case .canadaNationalID: return "National Identity Card"
         case .indiaDriversLicense: return "Driver's License"
+        case .lrId: return "National ID (Liberia)"
+        case .lrDriversLicense: return "Driver's License (Liberia)"
+        case .lrVotersCard: return "Voter's Card (Liberia)"
+        case .slId: return "National ID (Sierra Leone)"
+        case .slDriversLicense: return "Driver's License (Sierra Leone)"
+        case .slVotersCard: return "Voter's Card (Sierra Leone)"
+        case .gmId: return "National ID (Gambia)"
+        case .gmDriversLicense: return "Driver's License (Gambia)"
+        case .ngVotersCard: return "Voter's Card (Nigeria)"
+        case .ukBrp: return "Biometric Residence Permit"
+        case .deRp: return "Residence Permit (Germany)"
+        case .frRp: return "Residence Permit (France)"
+        case .itRp: return "Residence Permit (Italy)"
+        case .esRp: return "Residence Permit (Spain)"
+        case .ieRp: return "Residence Permit (Ireland)"
+        case .ptRp: return "Residence Permit (Portugal)"
+        case .seRp: return "Residence Permit (Sweden)"
+        case .dkRp: return "Residence Permit (Denmark)"
+        case .noRp: return "Residence Permit (Norway)"
+        case .fiRp: return "Residence Permit (Finland)"
+        case .plRp: return "Residence Permit (Poland)"
         }
     }
 
@@ -181,6 +239,12 @@ public enum DocumentType: String, CaseIterable, Codable {
         case .internationalPassport:
             return true
         case .euIdGermany, .euIdFrance, .euIdSpain, .euIdItaly:
+            return true
+        case .canadaPRCard, .canadaNationalID:
+            return true
+        case .ukBrp:
+            return true
+        case .deRp, .frRp, .itRp, .esRp, .ieRp, .ptRp, .seRp, .dkRp, .noRp, .fiRp, .plRp:
             return true
         default:
             return false
@@ -198,7 +262,13 @@ public enum DocumentType: String, CaseIterable, Codable {
             return true
         case .nigeriaDriversLicense, .ghanaDriversLicense, .kenyaDriversLicense,
              .southAfricaDriversLicense, .ukDriversLicense, .canadaDriversLicense,
-             .indiaDriversLicense:
+             .canadaPRCard, .indiaDriversLicense:
+            return true
+        case .lrId, .lrDriversLicense, .slId, .slDriversLicense, .gmId, .gmDriversLicense:
+            return true
+        case .ukBrp:
+            return true
+        case .deRp, .frRp, .itRp, .esRp, .ieRp, .ptRp, .seRp, .dkRp, .noRp, .fiRp, .plRp:
             return true
         default:
             return false
