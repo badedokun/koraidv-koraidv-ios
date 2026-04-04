@@ -118,12 +118,16 @@ public enum APIEnvironment {
 /// added on the backend.
 public enum DocumentType: String, CaseIterable, Codable {
     // US Documents
+    case usPassport = "us_passport"
     case usDriversLicense = "us_drivers_license"
     case usStateId = "us_state_id"
     case usGreenCard = "us_green_card"
 
     // Passport (all countries)
     case internationalPassport = "international_passport"
+
+    // UK Passport
+    case ukPassport = "uk_passport"
 
     // EU ID Cards
     case euIdGermany = "eu_id_de"
@@ -188,10 +192,12 @@ public enum DocumentType: String, CaseIterable, Codable {
     /// Display name for the document type
     public var displayName: String {
         switch self {
+        case .usPassport: return "Passport"
         case .usDriversLicense: return "Driver's License"
         case .usStateId: return "State ID Card"
         case .usGreenCard: return "Permanent Resident Card"
         case .internationalPassport: return "Passport"
+        case .ukPassport: return "Passport"
         case .euIdGermany: return "National ID Card (Germany)"
         case .euIdFrance: return "National ID Card (France)"
         case .euIdSpain: return "National ID Card (Spain)"
@@ -236,7 +242,7 @@ public enum DocumentType: String, CaseIterable, Codable {
     /// Whether this document type has MRZ
     public var hasMRZ: Bool {
         switch self {
-        case .internationalPassport:
+        case .usPassport, .internationalPassport, .ukPassport:
             return true
         case .euIdGermany, .euIdFrance, .euIdSpain, .euIdItaly:
             return true
