@@ -599,6 +599,186 @@ struct LoadingView: View {
     }
 }
 
+// MARK: - Simplified Result Screens (REQ-005)
+
+/// Success / Failed / Review screens that show only the outcome — no scores,
+/// no metrics. Used when `Configuration.resultPageMode == .simplified`.
+
+struct SimplifiedSuccessScreen: View {
+    let messages: ResultPageMessages?
+    let onDone: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer()
+            ZStack {
+                Circle()
+                    .fill(KoraColors.SuccessGreen.opacity(0.12))
+                    .frame(width: 96, height: 96)
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [KoraColors.SuccessGreen, Color(red: 5/255, green: 150/255, blue: 105/255)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 64, height: 64)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundColor(.white)
+            }
+            Text(messages?.successTitle ?? "Verification Successful")
+                .font(.system(size: 24, weight: .bold))
+                .foregroundColor(KoraColors.TextPrimary)
+                .padding(.top, 16)
+            Text(messages?.successMessage ?? "Your identity has been successfully verified. You can now proceed.")
+                .font(.system(size: 16))
+                .foregroundColor(KoraColors.TextSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 320)
+                .padding(.top, 8)
+            Spacer()
+            Button(action: onDone) {
+                Text("Continue")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(KoraColors.Teal)
+                    .cornerRadius(12)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 32)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.white)
+    }
+}
+
+struct SimplifiedFailedScreen: View {
+    let messages: ResultPageMessages?
+    let onRetry: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer()
+            ZStack {
+                Circle()
+                    .fill(KoraColors.ErrorRed.opacity(0.12))
+                    .frame(width: 96, height: 96)
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [KoraColors.ErrorRed, Color(red: 185/255, green: 28/255, blue: 28/255)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 64, height: 64)
+                Image(systemName: "xmark")
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundColor(.white)
+            }
+            Text(messages?.failedTitle ?? "Verification Failed")
+                .font(.system(size: 24, weight: .bold))
+                .foregroundColor(KoraColors.TextPrimary)
+                .padding(.top, 16)
+            Text(messages?.failedMessage ?? "We could not verify your identity. Please try again with a valid document.")
+                .font(.system(size: 16))
+                .foregroundColor(KoraColors.TextSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 320)
+                .padding(.top, 8)
+            Spacer()
+            Button(action: onRetry) {
+                Text("Try Again")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(KoraColors.Teal)
+                    .cornerRadius(12)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 32)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.white)
+    }
+}
+
+struct SimplifiedReviewScreen: View {
+    let verification: Verification
+    let messages: ResultPageMessages?
+    let onDone: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer()
+            ZStack {
+                Circle()
+                    .fill(KoraColors.WarningAmber.opacity(0.12))
+                    .frame(width: 96, height: 96)
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [KoraColors.WarningAmber, Color(red: 180/255, green: 83/255, blue: 9/255)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 64, height: 64)
+                Image(systemName: "clock.fill")
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundColor(.white)
+            }
+            Text(messages?.reviewTitle ?? "Verification Under Review")
+                .font(.system(size: 24, weight: .bold))
+                .foregroundColor(KoraColors.TextPrimary)
+                .padding(.top, 16)
+            Text(messages?.reviewMessage ?? "Your verification requires additional review. We will notify you of the result.")
+                .font(.system(size: 16))
+                .foregroundColor(KoraColors.TextSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 320)
+                .padding(.top, 8)
+            // Reference number
+            HStack(spacing: 4) {
+                Text("Reference:")
+                    .font(.system(size: 12))
+                    .foregroundColor(KoraColors.TextSecondary)
+                Text(String(verification.id.prefix(8)))
+                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                    .foregroundColor(KoraColors.TextPrimary)
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 12)
+            .background(KoraColors.InfoBlue.opacity(0.10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(KoraColors.InfoBlue.opacity(0.30), lineWidth: 1)
+            )
+            .cornerRadius(8)
+            .padding(.top, 24)
+            Spacer()
+            Button(action: onDone) {
+                Text("Got It")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(KoraColors.Teal)
+                    .cornerRadius(12)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 32)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.white)
+    }
+}
+
 // MARK: - Backward Compatibility
 
 struct ResultView: View {

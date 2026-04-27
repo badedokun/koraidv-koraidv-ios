@@ -43,6 +43,14 @@ public struct Configuration {
     /// Enable debug logging
     public var debugLogging: Bool
 
+    /// Result page mode (REQ-005). In `.simplified` mode the SDK shows only
+    /// Success / Failed / Review with no scores or per-check metrics.
+    /// Overrides the tenant-level `result_page_mode` setting when set.
+    public var resultPageMode: ResultPageMode
+
+    /// Optional per-outcome copy overrides for the simplified result page.
+    public var customMessages: ResultPageMessages?
+
     // MARK: - Initialization
 
     /// Initialize SDK configuration
@@ -85,6 +93,45 @@ public struct Configuration {
         self.locale = Locale.current
         self.timeout = 600 // 10 minutes
         self.debugLogging = false
+        self.resultPageMode = .detailed
+        self.customMessages = nil
+    }
+}
+
+// MARK: - Result Page Mode
+
+/// Controls how the end-user-facing result page is rendered (REQ-005).
+public enum ResultPageMode: String {
+    /// Full breakdown with scores, per-check metrics, and risk band.
+    case detailed
+    /// Only Success / Failed / Review with no scores or metrics.
+    case simplified
+}
+
+/// Optional per-outcome copy overrides for the simplified result page.
+/// Any nil value falls back to the SDK's built-in default text.
+public struct ResultPageMessages {
+    public var successTitle: String?
+    public var successMessage: String?
+    public var failedTitle: String?
+    public var failedMessage: String?
+    public var reviewTitle: String?
+    public var reviewMessage: String?
+
+    public init(
+        successTitle: String? = nil,
+        successMessage: String? = nil,
+        failedTitle: String? = nil,
+        failedMessage: String? = nil,
+        reviewTitle: String? = nil,
+        reviewMessage: String? = nil
+    ) {
+        self.successTitle = successTitle
+        self.successMessage = successMessage
+        self.failedTitle = failedTitle
+        self.failedMessage = failedMessage
+        self.reviewTitle = reviewTitle
+        self.reviewMessage = reviewMessage
     }
 }
 

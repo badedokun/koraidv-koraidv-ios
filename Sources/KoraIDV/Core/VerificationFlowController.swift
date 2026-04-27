@@ -473,53 +473,70 @@ final class VerificationFlowController {
     private func showResult(verification: Verification) {
         currentStep = .result
 
-        // Route to appropriate result screen based on status
+        let simplified = configuration.resultPageMode == .simplified
+        let messages = configuration.customMessages
+
+        // Route to appropriate result screen based on status. In simplified
+        // mode (REQ-005) we show only Success / Failed / Review without any
+        // scores or technical metrics.
         switch verification.status {
         case .approved:
-            let view = SuccessScreen(
-                verification: verification,
-                onDone: { [weak self] in
+            if simplified {
+                pushView(SimplifiedSuccessScreen(messages: messages) { [weak self] in
                     self?.finish(with: .success(verification))
-                }
-            )
-            pushView(view)
+                })
+            } else {
+                pushView(SuccessScreen(verification: verification) { [weak self] in
+                    self?.finish(with: .success(verification))
+                })
+            }
 
         case .rejected:
-            let view = RejectedScreen(
-                verification: verification,
-                onRetry: { [weak self] in
+            if simplified {
+                pushView(SimplifiedFailedScreen(messages: messages) { [weak self] in
                     self?.finish(with: .failure(.unknown("Verification rejected")))
-                }
-            )
-            pushView(view)
+                })
+            } else {
+                pushView(RejectedScreen(verification: verification) { [weak self] in
+                    self?.finish(with: .failure(.unknown("Verification rejected")))
+                })
+            }
 
         case .expired:
-            let view = ExpiredDocumentScreen(
-                verification: verification,
-                onRetry: { [weak self] in
+            if simplified {
+                // Expired is a failure flavour in simplified mode.
+                let overrideMessages = ResultPageMessages(
+                    failedTitle: messages?.failedTitle ?? "Document Expired",
+                    failedMessage: messages?.failedMessage ?? "The document you submitted has expired. Please use a valid document."
+                )
+                pushView(SimplifiedFailedScreen(messages: overrideMessages) { [weak self] in
                     self?.finish(with: .failure(.verificationExpired))
-                }
-            )
-            pushView(view)
+                })
+            } else {
+                pushView(ExpiredDocumentScreen(verification: verification) { [weak self] in
+                    self?.finish(with: .failure(.verificationExpired))
+                })
+            }
 
         case .reviewRequired:
-            let view = ManualReviewScreen(
-                verification: verification,
-                onDone: { [weak self] in
+            if simplified {
+                pushView(SimplifiedReviewScreen(verification: verification, messages: messages) { [weak self] in
                     self?.finish(with: .success(verification))
-                }
-            )
-            pushView(view)
+                })
+            } else {
+                pushView(ManualReviewScreen(verification: verification) { [weak self] in
+                    self?.finish(with: .success(verification))
+                })
+            }
 
         default:
-            let view = ResultView(
+            pushView(ResultView(
                 verification: verification,
                 theme: self.configuration.theme,
                 onDone: { [weak self] in
                     self?.finish(with: .success(verification))
                 }
-            )
-            pushView(view)
+            ))
         }
     }
 
