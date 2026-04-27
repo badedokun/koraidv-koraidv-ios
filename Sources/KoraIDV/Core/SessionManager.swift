@@ -59,25 +59,48 @@ public final class SessionManager {
         }
     }
 
-    /// Upload document image
+    /// Upload document image.
+    ///
+    /// `decodedBarcodePayload` is optional and only meaningful for back
+    /// captures on documents that carry a barcode (US/CA DLs, voter's
+    /// cards). When present (Vision decoded the PDF417 successfully on
+    /// device — see `BarcodeScanner`), the server skips its own image
+    /// decoding and parses the AAMVA payload directly. Empty/`nil` =
+    /// server falls back to its zxing-cpp + pdf417decoder cascade.
+    /// Phase 3 of the multi-channel decode roadmap.
     func uploadDocument(
         verificationId: String,
         imageData: Data,
         side: DocumentSide,
         documentType: DocumentType,
+        decodedBarcodePayload: String? = nil,
         completion: @escaping (Result<DocumentUploadResponse, KoraError>) -> Void
     ) {
-        let endpoint: APIEndpoint = side == .front
-            ? .uploadDocument(id: verificationId)
-            : .uploadDocumentBack(id: verificationId)
+        // Back side: use the JSON contract that matches the server's
+        // /document/back handler (and the Android SDK's wire format).
+        // This is the path that carries `decodedBarcodePayload`.
+        if side == .back {
+            let request = UploadDocumentBackRequest(
+                imageBase64: imageData.base64EncodedString(),
+                decodedBarcodePayload: decodedBarcodePayload
+            )
+            apiClient.request(
+                endpoint: .uploadDocumentBack(id: verificationId),
+                method: .post,
+                body: request,
+                completion: completion
+            )
+            return
+        }
 
+        // Front side: existing multipart path (kept for compatibility).
         let metadata = DocumentUploadMetadata(
             documentType: documentType.rawValue,
             side: side.rawValue
         )
 
         apiClient.uploadImage(
-            endpoint: endpoint,
+            endpoint: .uploadDocument(id: verificationId),
             imageData: imageData,
             metadata: metadata,
             completion: completion

@@ -149,10 +149,26 @@ struct SelfieUploadResponse: Decodable {
     let imagePersisted: Bool?
 }
 
-/// Document upload metadata
+/// Document upload metadata (multipart form path — front side only).
 struct DocumentUploadMetadata: Encodable {
     let documentType: String
     let side: String
+}
+
+/// Back-side document upload request (JSON path — matches the
+/// /v1/verifications/{id}/document/back server contract and the wire
+/// format used by the Android SDK).
+///
+/// `decodedBarcodePayload` is the optional Phase 3 fast-path: when the
+/// client decoded the PDF417 / QR / DataMatrix on-device using
+/// `BarcodeScanner` (which wraps Apple Vision's `VNDetectBarcodesRequest`),
+/// the AAMVA payload travels here so the server can skip image-based
+/// barcode decoding. Empty/`nil` when on-device decode failed — server
+/// falls back to its zxing-cpp + pdf417decoder cascade.
+/// See `docs/architecture/idv-decode-roadmap.md` Phase 3.
+struct UploadDocumentBackRequest: Encodable {
+    let imageBase64: String
+    let decodedBarcodePayload: String?
 }
 
 /// Liveness session
