@@ -91,12 +91,18 @@ final class APIClient {
     init(configuration: Configuration) {
         self.configuration = configuration
 
+        // The KoraIDV backend (and the Android/Web SDKs) use camelCase JSON
+        // keys. Pre-1.4.2 the iOS encoder/decoder were configured with
+        // snake_case conversion, which silently broke EVERY request: the
+        // server would receive `{"external_id":...}` and reject it as
+        // missing the required `externalId` field, surfacing as HTTP 400
+        // on the very first verification call. Use the default key
+        // strategy (.useDefaultKeys, matching the Swift property names
+        // verbatim) so the wire format matches the rest of the platform.
         self.decoder = JSONDecoder()
-        self.decoder.keyDecodingStrategy = .convertFromSnakeCase
         self.decoder.dateDecodingStrategy = .iso8601
 
         self.encoder = JSONEncoder()
-        self.encoder.keyEncodingStrategy = .convertToSnakeCase
         self.encoder.dateEncodingStrategy = .iso8601
 
         let sessionConfig = URLSessionConfiguration.default
@@ -119,12 +125,18 @@ final class APIClient {
     init(configuration: Configuration, sessionConfiguration: URLSessionConfiguration) {
         self.configuration = configuration
 
+        // The KoraIDV backend (and the Android/Web SDKs) use camelCase JSON
+        // keys. Pre-1.4.2 the iOS encoder/decoder were configured with
+        // snake_case conversion, which silently broke EVERY request: the
+        // server would receive `{"external_id":...}` and reject it as
+        // missing the required `externalId` field, surfacing as HTTP 400
+        // on the very first verification call. Use the default key
+        // strategy (.useDefaultKeys, matching the Swift property names
+        // verbatim) so the wire format matches the rest of the platform.
         self.decoder = JSONDecoder()
-        self.decoder.keyDecodingStrategy = .convertFromSnakeCase
         self.decoder.dateDecodingStrategy = .iso8601
 
         self.encoder = JSONEncoder()
-        self.encoder.keyEncodingStrategy = .convertToSnakeCase
         self.encoder.dateEncodingStrategy = .iso8601
 
         self.delegateProxy = nil
