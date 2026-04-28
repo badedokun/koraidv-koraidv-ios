@@ -147,7 +147,13 @@ public enum APIEnvironment {
         case .production:
             return URL(string: "https://api.korastratum.com/api/v1/idv")!
         case .sandbox:
-            return URL(string: "https://api.korastratum.com/api/v1/idv")!
+            // Sandbox identity-service in the orokii-platform GCP project.
+            // Matches the Android SDK's `Environment.SANDBOX` URL exactly so
+            // partner testers see consistent behavior cross-platform.
+            // Pre-1.4.1 this incorrectly returned the production URL,
+            // causing 400s on every sandbox verification request because
+            // sandbox API keys aren't valid against the production endpoint.
+            return URL(string: "https://koraidv-identity-sandbox-626704085312.us-central1.run.app/api/v1")!
         }
     }
 }
