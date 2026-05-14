@@ -415,4 +415,4 @@ class ComplianceImageService {
 
 ## License
 
-Copyright 2025 Kora IDV. All rights reserved.
+MIT — see [LICENSE](./LICENSE). Copyright © 2026 Korastratum, Inc.
