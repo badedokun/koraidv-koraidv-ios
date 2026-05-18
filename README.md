@@ -15,7 +15,7 @@ Native iOS SDK for identity verification with document capture, selfie capture, 
 Add to your `Podfile`:
 
 ```ruby
-pod 'KoraIDV', :git => 'https://github.com/badedokun/koraidv-koraidv-ios.git', :tag => '1.5.4'
+pod 'KoraIDV', :git => 'https://github.com/badedokun/koraidv-koraidv-ios.git', :tag => '1.5.5'
 ```
 
 Then run:
@@ -32,7 +32,7 @@ Add the following to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/badedokun/koraidv-koraidv-ios.git", from: "1.5.4")
+    .package(url: "https://github.com/badedokun/koraidv-koraidv-ios.git", from: "1.5.5")
 ]
 ```
 
