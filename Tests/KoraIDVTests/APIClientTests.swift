@@ -222,15 +222,20 @@ final class APIClientTests: XCTestCase {
     func testSuccessResponseDecodesCorrectly() {
         let expectation = expectation(description: "decode")
 
+        // Verification's Codable keys are camelCase, matching the backend's
+        // BuildVerificationAPIResponse output (e.g. externalId, tenantId,
+        // createdAt). Pre-existing fixture used snake_case which never
+        // matched; the test had been failing silently against any current
+        // Verification model.
         MockURLProtocol.requestHandler = { _ in
             return (self.makeResponse(statusCode: 200), self.makeJSON([
                 "id": "v123",
-                "external_id": "ext-1",
-                "tenant_id": "t-1",
+                "externalId": "ext-1",
+                "tenantId": "t-1",
                 "tier": "standard",
                 "status": "approved",
-                "created_at": "2025-01-01T00:00:00Z",
-                "updated_at": "2025-01-01T00:00:00Z"
+                "createdAt": "2025-01-01T00:00:00Z",
+                "updatedAt": "2025-01-01T00:00:00Z"
             ]))
         }
 

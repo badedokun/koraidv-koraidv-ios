@@ -138,11 +138,14 @@ final class SessionManagerTests: XCTestCase {
     }
 
     func testSandboxEnvironmentDetectedFromAPIKey() {
-        let config = Configuration(apiKey: "ck_sandbox_key", tenantId: "t")
+        // v1.6.0 narrowed the auto-detect prefix to `sk_sandbox_` only.
+        let config = Configuration(apiKey: "sk_sandbox_key", tenantId: "t")
         XCTAssertEqual(config.environment, .sandbox)
     }
 
     func testProductionEnvironmentDetectedFromAPIKey() {
+        // Anything that isn't `sk_sandbox_` (including legacy ck_live_)
+        // falls through to production.
         let config = Configuration(apiKey: "ck_live_key", tenantId: "t")
         XCTAssertEqual(config.environment, .production)
     }

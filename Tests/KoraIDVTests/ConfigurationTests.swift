@@ -5,14 +5,27 @@ final class ConfigurationTests: XCTestCase {
 
     // MARK: - Environment Auto-Detection
 
-    func testSandboxKeyPrefixCKDetectsSandbox() {
-        let config = Configuration(apiKey: "ck_sandbox_abc123", tenantId: "tenant-1")
+    // v1.6.0 dropped legacy key prefixes; only `sk_sandbox_` auto-detects
+    // sandbox now. Anything else (including the old `ck_sandbox_` /
+    // `kora_sandbox_` formats) falls through to .production. These tests
+    // pin that contract so a future revert can't quietly resurrect the
+    // legacy detection.
+
+    func testSandboxKeyPrefixSKDetectsSandbox() {
+        let config = Configuration(apiKey: "sk_sandbox_abc123", tenantId: "tenant-1")
         XCTAssertEqual(config.environment, .sandbox)
     }
 
-    func testSandboxKeyPrefixKoraDetectsSandbox() {
+    func testLegacyCKSandboxPrefixNoLongerDetectsSandbox() {
+        let config = Configuration(apiKey: "ck_sandbox_abc123", tenantId: "tenant-1")
+        XCTAssertEqual(config.environment, .production,
+            "Legacy ck_sandbox_ prefix was dropped in v1.6.0 and should now fall through to .production")
+    }
+
+    func testLegacyKoraSandboxPrefixNoLongerDetectsSandbox() {
         let config = Configuration(apiKey: "kora_sandbox_xyz789", tenantId: "tenant-1")
-        XCTAssertEqual(config.environment, .sandbox)
+        XCTAssertEqual(config.environment, .production,
+            "Legacy kora_sandbox_ prefix was dropped in v1.6.0 and should now fall through to .production")
     }
 
     func testLiveKeyPrefixCKDetectsProduction() {
@@ -112,19 +125,28 @@ final class ConfigurationTests: XCTestCase {
         }
     }
 
-    func testAllDocumentTypesCountIs12() {
-        XCTAssertEqual(DocumentType.allCases.count, 12)
+    func testAllDocumentTypesCountIs42() {
+        // 42 ICAO + national IDs + DLs + residence permits + voter cards
+        // across US/EU/UK/Canada/Africa/India as of v1.6.x. Bump when adding
+        // new countries to keep accidental enum drift visible.
+        XCTAssertEqual(DocumentType.allCases.count, 42)
     }
 
     // MARK: - API Environment URLs
 
     func testProductionEnvironmentBaseURL() {
+        // Routed via the production gateway at api.korastratum.com; the /idv
+        // suffix is the IDV product path on the gateway.
         let url = APIEnvironment.production.baseURL
-        XCTAssertEqual(url.absoluteString, "https://koraidv-identity-kendyplisq-uc.a.run.app/api/v1")
+        XCTAssertEqual(url.absoluteString, "https://api.korastratum.com/api/v1/idv")
     }
 
     func testSandboxEnvironmentBaseURL() {
+        // Sandbox identity-service in the orokii-platform GCP project; must
+        // mirror Android's Environment.SANDBOX exactly so cross-platform
+        // testers see consistent behavior.
         let url = APIEnvironment.sandbox.baseURL
-        XCTAssertEqual(url.absoluteString, "https://koraidv-identity-kendyplisq-uc.a.run.app/api/v1")
+        XCTAssertEqual(url.absoluteString,
+            "https://koraidv-identity-sandbox-626704085312.us-central1.run.app/api/v1")
     }
 }
