@@ -559,4 +559,73 @@ final class APIClientTests: XCTestCase {
         XCTAssertEqual(HTTPMethod.patch.rawValue, "PATCH")
         XCTAssertEqual(HTTPMethod.delete.rawValue, "DELETE")
     }
+
+    // MARK: - Upload-response decode regression (v1.6.1 hotfix)
+    //
+    // The backend's ProcessDocumentResult / ProcessSelfieResult /
+    // SubmitLivenessChallengeResult do NOT include a top-level `success`
+    // field — 2xx HTTP IS the success signal. Before v1.6.1 the iOS DTOs
+    // declared `success: Bool` as required, so JSONDecoder threw
+    // keyNotFound ("The data couldn't be read because it is missing.")
+    // the first time the SDK actually got past the multipart→JSON cutover
+    // in v1.6.0. The tests below pin the contract: decode succeeds with
+    // the literal payload the server returns, and `isSuccess` defaults
+    // to true when the field is absent.
+
+    func testDocumentUploadResponseDecodesWithoutSuccessField() throws {
+        // Exact shape returned by sandbox /verifications/{id}/document
+        let json = """
+        {
+            "documentId": "543cac2d-f7c3-4875-bdb0-c108139b0472",
+            "documentType": "international_passport",
+            "qualityScore": 0,
+            "imagePersisted": true
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(DocumentUploadResponse.self, from: json)
+        XCTAssertEqual(decoded.documentId, "543cac2d-f7c3-4875-bdb0-c108139b0472")
+        XCTAssertEqual(decoded.imagePersisted, true)
+        XCTAssertNil(decoded.success, "Backend omits `success`; field should decode as nil")
+        XCTAssertTrue(decoded.isSuccess, "Absent `success` must be treated as success")
+    }
+
+    func testDocumentUploadResponseHonorsExplicitSuccessFalse() throws {
+        // Future-proof: if the backend ever adds an explicit false,
+        // isSuccess must reflect it.
+        let json = #"{"documentId":"x","success":false}"#.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(DocumentUploadResponse.self, from: json)
+        XCTAssertEqual(decoded.success, false)
+        XCTAssertFalse(decoded.isSuccess)
+    }
+
+    func testSelfieUploadResponseDecodesWithoutSuccessField() throws {
+        // Shape mirrors ProcessSelfieResult — `faceDetected` is the only
+        // field iOS still requires.
+        let json = """
+        {
+            "faceDetected": true,
+            "faceCount": 1,
+            "qualityScore": 0.92,
+            "imagePersisted": true
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(SelfieUploadResponse.self, from: json)
+        XCTAssertTrue(decoded.faceDetected)
+        XCTAssertNil(decoded.success)
+        XCTAssertTrue(decoded.isSuccess)
+    }
+
+    func testLivenessChallengeResponseDecodesWithoutSuccessField() throws {
+        // Defensive: backend returns `completed` / `score` / `allCompleted`
+        // not `challengePassed` / `confidence` / `remainingChallenges`.
+        // Decode must not throw even though the iOS field names don't
+        // match — they're all optional in v1.6.1 so absence is fine.
+        let json = #"{"imagePersisted":true}"#.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(LivenessChallengeResponse.self, from: json)
+        XCTAssertNil(decoded.success)
+        XCTAssertNil(decoded.challengePassed)
+        XCTAssertTrue(decoded.isSuccess)
+    }
 }
