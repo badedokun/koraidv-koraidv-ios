@@ -185,7 +185,7 @@ final class VerificationFlowController {
             // the selected-vs-detected mismatch gate at /complete can fire.
             // Only meaningful on FRONT uploads (backfill is conditional on
             // the field being currently empty), but harmless on back.
-            countryCode: selectedCountry?.code
+            countryCode: selectedCountry?.id
         ) { [weak self] result in
             DispatchQueue.main.async {
                 self?.hideLoading()
