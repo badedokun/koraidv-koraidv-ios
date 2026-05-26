@@ -122,14 +122,29 @@ struct CreateVerificationRequest: Encodable {
     let expectedLastName: String?
 }
 
-/// Document upload response
+/// Document upload response.
+///
+/// The backend's `ProcessDocumentResult` does NOT include a top-level
+/// `success` field — a 2xx HTTP status IS the success signal. iOS
+/// previously declared `success: Bool` as required which caused
+/// `JSONDecoder` to throw `keyNotFound` ("data couldn't be read because
+/// it is missing") as soon as the SDK actually started getting 2xx
+/// responses in v1.6.0 (the multipart→JSON cutover unmasked it —
+/// pre-1.6.0 uploads always got HTTP 400 and never reached this path).
+/// Android tolerates the missing field because all its DTO fields are
+/// nullable. Surfaced by BanffPay 2026-05-26.
 struct DocumentUploadResponse: Decodable {
-    let success: Bool
+    let success: Bool?
     let documentId: String?
     let qualityScore: Double?
     let qualityIssues: [APIQualityIssue]?
     let extractedData: DocumentVerification?
     let imagePersisted: Bool?
+
+    /// Convenience: HTTP 2xx + decode succeeded ⇒ upload succeeded.
+    /// Treats absent `success` as `true` so a server that omits the
+    /// field is interpreted as success rather than failure.
+    var isSuccess: Bool { success ?? true }
 }
 
 /// API Quality issue (from server responses)
@@ -139,14 +154,18 @@ struct APIQualityIssue: Decodable {
     let severity: String
 }
 
-/// Selfie upload response
+/// Selfie upload response. Same backend-omits-`success` story as
+/// `DocumentUploadResponse` above. `faceDetected` IS returned by the
+/// backend so we keep it required.
 struct SelfieUploadResponse: Decodable {
-    let success: Bool
+    let success: Bool?
     let selfieId: String?
     let faceDetected: Bool
     let qualityScore: Double?
     let qualityIssues: [APIQualityIssue]?
     let imagePersisted: Bool?
+
+    var isSuccess: Bool { success ?? true }
 }
 
 /// Document upload metadata (legacy multipart form — DEPRECATED).
@@ -246,11 +265,20 @@ public struct DocumentQualityDetails: Decodable {
     public let imageClarity: Double
 }
 
-/// Liveness challenge response
+/// Liveness challenge response.
+///
+/// Defensive: backend doesn't return `success`, and the field names
+/// for the other fields are a known mismatch with `SubmitLivenessChallengeResult`
+/// (server returns `completed`/`score`/`allCompleted`, not
+/// `challengePassed`/`confidence`/`remainingChallenges`). The full
+/// rename is tracked for the next minor; making everything optional
+/// here at least lets decode succeed instead of throwing.
 struct LivenessChallengeResponse: Decodable {
-    let success: Bool
-    let challengePassed: Bool
-    let confidence: Double
-    let remainingChallenges: Int
+    let success: Bool?
+    let challengePassed: Bool?
+    let confidence: Double?
+    let remainingChallenges: Int?
     let imagePersisted: Bool?
+
+    var isSuccess: Bool { success ?? true }
 }

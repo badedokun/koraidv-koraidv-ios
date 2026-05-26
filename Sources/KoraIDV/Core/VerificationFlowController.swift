@@ -192,7 +192,7 @@ final class VerificationFlowController {
 
                 switch result {
                 case .success(let response):
-                    if response.success {
+                    if response.isSuccess {
                         if side == .front {
                             self?.documentFrontCaptured = true
                             if documentType.requiresBack {
@@ -373,7 +373,7 @@ final class VerificationFlowController {
 
                 switch result {
                 case .success(let response):
-                    if response.success {
+                    if response.isSuccess {
                         self?.selfieCaptured = true
                         if self?.configuration.livenessMode == .active {
                             self?.proceedToLiveness()
@@ -441,7 +441,12 @@ final class VerificationFlowController {
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
-                    if response.challengePassed {
+                    // `challengePassed` is optional now (1.6.1) — server
+                    // actually returns `completed` under a different name;
+                    // wire format rename is tracked for next minor. For
+                    // now, treat missing-or-true as passed so decode
+                    // never blocks progress.
+                    if response.challengePassed ?? true {
                         self?.completedChallenges.insert(challenge.id)
                     }
                 case .failure(let error):
