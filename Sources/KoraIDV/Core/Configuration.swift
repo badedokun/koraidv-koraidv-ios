@@ -55,7 +55,7 @@ public struct Configuration {
 
     /// Initialize SDK configuration
     /// - Parameters:
-    ///   - apiKey: Your API key (starts with ck_live_, ck_sandbox_, kora_live_, or kora_sandbox_)
+    ///   - apiKey: Your API key. Sandbox keys start with `sk_sandbox_`, production with `sk_live_`.
     ///   - tenantId: Your tenant ID (UUID)
     ///   - environment: API environment (auto-detected from API key if not specified)
     ///   - baseURL: Custom base URL override (optional, overrides environment URL if provided)
@@ -77,10 +77,11 @@ public struct Configuration {
         }
         self.baseURL = baseURL
 
-        // Auto-detect environment from API key prefix
+        // Auto-detect environment from API key prefix.
+        // Canonical: sk_sandbox_<slug>_<hex> | sk_live_<slug>_<hex>.
         if let env = environment {
             self.environment = env
-        } else if apiKey.hasPrefix("ck_sandbox_") || apiKey.hasPrefix("kora_sandbox_") {
+        } else if apiKey.hasPrefix("sk_sandbox_") {
             self.environment = .sandbox
         } else {
             self.environment = .production

@@ -74,11 +74,12 @@ public final class SessionManager {
         side: DocumentSide,
         documentType: DocumentType,
         decodedBarcodePayload: String? = nil,
+        countryCode: String? = nil,
         completion: @escaping (Result<DocumentUploadResponse, KoraError>) -> Void
     ) {
-        // Back side: use the JSON contract that matches the server's
-        // /document/back handler (and the Android SDK's wire format).
-        // This is the path that carries `decodedBarcodePayload`.
+        // Back side: JSON contract matching the server's /document/back
+        // handler + the Android SDK's wire format. Carries the optional
+        // on-device-decoded barcode payload (Phase 3 fast path).
         if side == .back {
             let request = UploadDocumentBackRequest(
                 imageBase64: imageData.base64EncodedString(),
@@ -93,16 +94,23 @@ public final class SessionManager {
             return
         }
 
-        // Front side: existing multipart path (kept for compatibility).
-        let metadata = DocumentUploadMetadata(
+        // Front side: JSON path. Previously this was multipart, which the
+        // backend handler rejected with HTTP 400 because /document only
+        // parses application/json — that was the iOS-specific failure
+        // BanffPay reported 2026-05-25. Aligning with the Android wire
+        // format also lets us include `country` so the backend can
+        // backfill verification.selectedCountry and fire the
+        // selected-vs-detected mismatch gate at /complete.
+        let request = UploadDocumentRequest(
             documentType: documentType.rawValue,
-            side: side.rawValue
+            imageBase64: imageData.base64EncodedString(),
+            country: countryCode
         )
 
-        apiClient.uploadImage(
+        apiClient.request(
             endpoint: .uploadDocument(id: verificationId),
-            imageData: imageData,
-            metadata: metadata,
+            method: .post,
+            body: request,
             completion: completion
         )
     }

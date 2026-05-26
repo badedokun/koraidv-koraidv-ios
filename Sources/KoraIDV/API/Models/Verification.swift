@@ -149,10 +149,33 @@ struct SelfieUploadResponse: Decodable {
     let imagePersisted: Bool?
 }
 
-/// Document upload metadata (multipart form path — front side only).
+/// Document upload metadata (legacy multipart form — DEPRECATED).
+///
+/// The backend handler only parses `application/json` on /document; the
+/// multipart path returned HTTP 400 for every iOS upload (silent bug from
+/// the day the iOS SDK shipped, surfaced 2026-05-25 by BanffPay's
+/// Olabode). Front uploads now use `UploadDocumentRequest` (the same
+/// JSON-with-base64 contract as Android + the existing back-side path).
+/// Kept here only so the multipart helper in APIClient.uploadImage still
+/// type-checks for unrelated callers (NFC, etc.).
 struct DocumentUploadMetadata: Encodable {
     let documentType: String
     let side: String
+}
+
+/// Front-side document upload request (JSON path — matches the server's
+/// /v1/verifications/{id}/document handler and the Android SDK's wire
+/// format). Replaces the broken multipart path above.
+///
+/// `country` is the ISO-3166 alpha-2 issuing country the SDK user picked
+/// in the country picker. Sent here rather than at create-time because
+/// createVerification fires at consent-accept, before the picker. Backend
+/// backfills the verification's selectedCountry so the selected-vs-detected
+/// mismatch gate can fire. Optional for backwards compat.
+struct UploadDocumentRequest: Encodable {
+    let documentType: String
+    let imageBase64: String
+    let country: String?
 }
 
 /// Back-side document upload request (JSON path — matches the
