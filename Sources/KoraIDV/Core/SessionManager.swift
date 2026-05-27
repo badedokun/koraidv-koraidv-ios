@@ -135,16 +135,26 @@ public final class SessionManager {
         )
     }
 
-    /// Upload selfie image
+    /// Upload selfie image.
+    ///
+    /// JSON path matching the server's `/v1/verifications/{id}/selfie`
+    /// handler and the Android SDK's wire format. Previously this used
+    /// `apiClient.uploadImage` (multipart) which the JSON-only handler
+    /// rejected with HTTP 400 — sister bug to the v1.6.0 `/document`
+    /// fix, missed during that audit and surfaced by BanffPay in v1.6.1
+    /// once the upstream blockers cleared.
     func uploadSelfie(
         verificationId: String,
         imageData: Data,
         completion: @escaping (Result<SelfieUploadResponse, KoraError>) -> Void
     ) {
-        apiClient.uploadImage(
+        let request = UploadSelfieRequest(
+            imageBase64: imageData.base64EncodedString()
+        )
+        apiClient.request(
             endpoint: .uploadSelfie(id: verificationId),
-            imageData: imageData,
-            metadata: nil as EmptyBody?,
+            method: .post,
+            body: request,
             completion: completion
         )
     }
@@ -163,22 +173,28 @@ public final class SessionManager {
         }
     }
 
-    /// Submit liveness challenge result
+    /// Submit liveness challenge result.
+    ///
+    /// JSON path matching the server's
+    /// `/v1/verifications/{id}/liveness/challenge` handler and the
+    /// Android SDK's wire format. Previously used `apiClient.uploadImage`
+    /// (multipart) — same multipart-vs-JSON sister bug as `uploadSelfie`
+    /// above. Latent since iOS shipped; would have fired the moment
+    /// anyone got past the selfie step. Fixed in v1.6.2.
     func submitLivenessChallenge(
         verificationId: String,
         challenge: LivenessChallenge,
         imageData: Data,
         completion: @escaping (Result<LivenessChallengeResponse, KoraError>) -> Void
     ) {
-        let metadata = LivenessChallengeMetadata(
+        let request = SubmitLivenessChallengeRequest(
             challengeType: challenge.type.rawValue,
-            challengeId: challenge.id
+            imageBase64: imageData.base64EncodedString()
         )
-
-        apiClient.uploadImage(
+        apiClient.request(
             endpoint: .submitLivenessChallenge(id: verificationId),
-            imageData: imageData,
-            metadata: metadata,
+            method: .post,
+            body: request,
             completion: completion
         )
     }

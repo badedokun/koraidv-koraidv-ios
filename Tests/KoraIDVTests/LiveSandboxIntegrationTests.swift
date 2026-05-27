@@ -162,6 +162,117 @@ final class LiveSandboxIntegrationTests: XCTestCase {
         }
     }
 
+    /// v1.6.2 regression: iOS `uploadSelfie` previously used the multipart
+    /// helper while the backend `UploadSelfieRequest` requires JSON
+    /// (`ShouldBindJSON` rejects multipart with HTTP 400). The fix
+    /// converted it to a JSON body matching the Android SDK's wire
+    /// format. This test pins the new contract — if anyone reverts to
+    /// multipart, this fails with HTTP 400 instantly.
+    ///
+    /// Sister bug to the v1.6.0 `/document` fix; missed during that
+    /// audit because the v1.6.0 sweep only covered the endpoint that
+    /// was reported (BanffPay iOS HTTP 400 on doc-front). Surfaced in
+    /// v1.6.1 when the upstream blockers cleared and the flow finally
+    /// reached selfie.
+    func testSelfieUploadAcceptsJSONFromLiveSandbox() throws {
+        let verification = try createVerification()
+
+        let uploadExpectation = expectation(description: "uploadSelfie")
+        var uploadResult: Result<SelfieUploadResponse, KoraError>?
+        sessionManager.uploadSelfie(
+            verificationId: verification.id,
+            imageData: stubJPEG()
+        ) { result in
+            uploadResult = result
+            uploadExpectation.fulfill()
+        }
+        wait(for: [uploadExpectation], timeout: 30)
+
+        switch uploadResult {
+        case .success(let response):
+            // 2xx + decode. Backend may report `faceDetected: false` for
+            // the 1×1 stub — that's a business outcome, not a wire-format
+            // failure. The point of this test is that the JSON contract
+            // round-trips end-to-end.
+            XCTAssertTrue(response.isSuccess,
+                "isSuccess should be true on a 2xx response with absent success field")
+        case .failure(let error):
+            // 5xx is acceptable here: a 1×1 stub JPEG can't pass face
+            // detection so ProcessSelfie may fail downstream — but the
+            // SERVER had to PARSE our JSON body to get that far. The
+            // wire-format regression we're pinning is HTTP 400 from
+            // `ShouldBindJSON` rejecting a multipart body. Any non-400
+            // failure is proof the JSON contract round-tripped.
+            if case .httpError(let code) = error, code == 400 {
+                XCTFail("HTTP 400 on JSON selfie upload — multipart regression: \(error)")
+            }
+            // Any other failure (500 from face-detection on stub image,
+            // validationError, etc.) is fine for this wire-format pin.
+        case nil:
+            XCTFail("uploadSelfie did not call back within 30s")
+        }
+    }
+
+    /// v1.6.2 regression: same multipart→JSON story as selfie above,
+    /// for `/liveness/challenge`. Server expects
+    /// `SubmitLivenessChallengeRequest { ChallengeType, ImageBase64 }`
+    /// via `ShouldBindJSON`. iOS previously sent multipart with
+    /// `LivenessChallengeMetadata` form fields. Fixed in v1.6.2.
+    ///
+    /// Note: this test exercises the wire format only — it creates a
+    /// synthetic LivenessChallenge object rather than going through
+    /// `createLivenessSession`, so the server may reject the unknown
+    /// challenge id at a business-logic level. Any rejection that is
+    /// NOT HTTP 400 from `ShouldBindJSON` failing on multipart proves
+    /// the wire format is intact.
+    func testLivenessChallengeAcceptsJSONFromLiveSandbox() throws {
+        let verification = try createVerification()
+
+        let challenge = LivenessChallenge(
+            id: "test-challenge-\(UUID().uuidString)",
+            type: .blink,
+            instruction: "Blink slowly",
+            order: 1
+        )
+
+        let submitExpectation = expectation(description: "submitLivenessChallenge")
+        var submitResult: Result<LivenessChallengeResponse, KoraError>?
+        sessionManager.submitLivenessChallenge(
+            verificationId: verification.id,
+            challenge: challenge,
+            imageData: stubJPEG()
+        ) { result in
+            submitResult = result
+            submitExpectation.fulfill()
+        }
+        wait(for: [submitExpectation], timeout: 30)
+
+        switch submitResult {
+        case .success(let response):
+            XCTAssertTrue(response.isSuccess)
+        case .failure(let error):
+            // The server may reject the synthetic challenge with a
+            // business-level error — that's acceptable. What we MUST
+            // NOT see is a 400 from multipart-vs-JSON: that response
+            // body is the gin `{"error": "..."}` envelope from
+            // ShouldBindJSON failing to parse a multipart body. Any
+            // other failure means the JSON contract round-tripped and
+            // the server merely rejected on business grounds.
+            //
+            // KoraError surfaces these distinguishably; the test
+            // accepts validationError / httpError but fails on a 400
+            // with the multipart-mismatch signature.
+            if case .httpError(let code) = error, code == 400 {
+                // Inspect the message — if it mentions JSON parsing or
+                // multipart, the multipart regression is back.
+                XCTFail("HTTP 400 on JSON liveness submit — possible multipart regression: \(error)")
+            }
+            // Any other error is fine for this wire-format pin.
+        case nil:
+            XCTFail("submitLivenessChallenge did not call back within 30s")
+        }
+    }
+
     /// Pins the GET /document-types decode path (used by the country picker).
     /// 608 documents across 120+ countries on the sandbox today; this test
     /// asserts decode succeeds without enumerating contents (which churn

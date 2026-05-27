@@ -197,6 +197,36 @@ struct UploadDocumentRequest: Encodable {
     let country: String?
 }
 
+/// Selfie upload request (JSON path — matches the server's
+/// `/v1/verifications/{id}/selfie` handler and the Android SDK's wire
+/// format).
+///
+/// iOS previously used the multipart `apiClient.uploadImage` helper for
+/// this endpoint, but the backend handler only parses JSON
+/// (`UploadSelfieRequest { ImageBase64 string }` + `ShouldBindJSON`).
+/// Result: every iOS selfie upload returned HTTP 400 since the SDK
+/// shipped — invisible until v1.6.1 cleared the upstream blockers
+/// (multipart→JSON on `/document`, then optional `success` on the
+/// decoder). Sister bug to the v1.6.0 doc-front fix; missed during
+/// that audit. Fixed in v1.6.2 (2026-05-27).
+struct UploadSelfieRequest: Encodable {
+    let imageBase64: String
+}
+
+/// Liveness-challenge submission request (JSON path — matches the
+/// server's `/v1/verifications/{id}/liveness/challenge` handler and
+/// the Android SDK's wire format).
+///
+/// Same multipart-vs-JSON sister bug as `UploadSelfieRequest` above —
+/// iOS used `apiClient.uploadImage` (multipart) while the backend
+/// `SubmitLivenessChallengeRequest { ChallengeType, ImageBase64 }`
+/// strictly requires JSON. Latent since iOS shipped; would have
+/// fired the moment anyone got past the selfie step. Fixed in v1.6.2.
+struct SubmitLivenessChallengeRequest: Encodable {
+    let challengeType: String
+    let imageBase64: String
+}
+
 /// Back-side document upload request (JSON path — matches the
 /// /v1/verifications/{id}/document/back server contract and the wire
 /// format used by the Android SDK).

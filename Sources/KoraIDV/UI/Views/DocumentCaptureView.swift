@@ -186,6 +186,13 @@ struct DocumentCaptureView: View {
                     action: {
                         showReview = false
                         capturedImageData = nil
+                        // Re-enable auto-capture: the view-model's
+                        // hasPendingReview gate is set on every committed
+                        // capture (v1.6.2 fix for the doc-recapture race)
+                        // and must be cleared explicitly here, otherwise
+                        // Retake would leave the gate closed forever and
+                        // the camera would never auto-capture again.
+                        viewModel.clearPendingReview()
                     },
                     variant: .darkOutline
                 )
@@ -328,6 +335,21 @@ class DocumentCaptureViewModel: ObservableObject {
     private var onCapture: ((Data) -> Void)?
     private var isCapturing = false
 
+    /// Set once a captured frame passes validation and is handed to the
+    /// review UI. Blocks subsequent auto-capture firings while the user
+    /// is reviewing the committed image. Without this guard the camera
+    /// session keeps running through review, the document detector keeps
+    /// firing on every stable frame, `captureManually()` re-fires, and
+    /// the displayed review image is silently replaced — the BanffPay
+    /// "rapid doc snapping" defect (see v1.6.2 release notes 2026-05-27).
+    ///
+    /// Mirrors the Android double-gate pattern in
+    /// `koraidv-android/koraidv/.../ui/compose/CaptureScreens.kt:263`
+    /// (`!isCapturing && capturedImageBytes == null`), which is why the
+    /// Pixel 9 Pro XL testing did not surface the bug — Android already
+    /// had the equivalent guard.
+    private var hasPendingReview = false
+
     func startCapture(onCapture: @escaping (Data) -> Void) {
         self.onCapture = onCapture
 
@@ -350,8 +372,16 @@ class DocumentCaptureViewModel: ObservableObject {
         cameraManager.stop()
     }
 
+    /// Re-enable auto-capture after the user dismisses the review
+    /// (e.g. taps Retake). Without this the gate stays closed forever
+    /// and the SDK can't recapture even on user request.
+    func clearPendingReview() {
+        hasPendingReview = false
+        isProcessing = false
+    }
+
     func captureManually() {
-        guard !isCapturing else { return }
+        guard !isCapturing, !hasPendingReview else { return }
         isCapturing = true
         isProcessing = true
         cameraManager.capturePhoto()
@@ -376,6 +406,14 @@ extension DocumentCaptureViewModel: CameraManagerDelegate {
             self.isProcessing = false
 
             if validation.isValid {
+                // Close the auto-capture gate BEFORE firing onCapture.
+                // The view will switch to review on the callback; while
+                // it does, the camera session is still running and the
+                // detector will still see the document as stable. Without
+                // this gate, the detector re-fires captureManually and
+                // silently replaces the displayed review image. The gate
+                // is released on retake via clearPendingReview().
+                self.hasPendingReview = true
                 self.onCapture?(imageData)
             } else {
                 self.feedbackMessage = validation.issues.first?.message ?? "Quality check failed"
@@ -384,7 +422,7 @@ extension DocumentCaptureViewModel: CameraManagerDelegate {
     }
 
     func cameraManager(_ manager: CameraManager, didOutput sampleBuffer: CMSampleBuffer) {
-        guard !isCapturing else { return }
+        guard !isCapturing, !hasPendingReview else { return }
 
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
@@ -395,7 +433,10 @@ extension DocumentCaptureViewModel: CameraManagerDelegate {
 
                     if result.isStable {
                         self?.feedbackMessage = "Hold steady..."
-                        if self?.isCapturing == false {
+                        // Same double-gate as the entry guard: both
+                        // `isCapturing` and `hasPendingReview` must be
+                        // clear before firing.
+                        if self?.isCapturing == false && self?.hasPendingReview == false {
                             self?.captureManually()
                         }
                     } else {
