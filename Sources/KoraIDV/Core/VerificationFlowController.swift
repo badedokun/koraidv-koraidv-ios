@@ -165,7 +165,8 @@ final class VerificationFlowController {
             },
             onCancel: { [weak self] in
                 self?.cancel()
-            }
+            },
+            showVisualGuides: configuration.showVisualGuides
         )
 
         pushView(captureView)
@@ -244,7 +245,8 @@ final class VerificationFlowController {
             },
             onCancel: { [weak self] in
                 self?.cancel()
-            }
+            },
+            showVisualGuides: configuration.showVisualGuides
         )
 
         pushView(captureView)
@@ -355,7 +357,8 @@ final class VerificationFlowController {
             },
             onCancel: { [weak self] in
                 self?.cancel()
-            }
+            },
+            showVisualGuides: configuration.showVisualGuides
         )
 
         pushView(selfieView)
@@ -426,7 +429,8 @@ final class VerificationFlowController {
             },
             onCancel: { [weak self] in
                 self?.cancel()
-            }
+            },
+            showVisualGuides: configuration.showVisualGuides
         )
 
         pushView(livenessView)
@@ -651,7 +655,8 @@ final class VerificationFlowController {
                 onCapture: { [weak self] imageData in
                     self?.handleSelfieCapture(imageData: imageData)
                 },
-                onCancel: { [weak self] in self?.cancel() }
+                onCancel: { [weak self] in self?.cancel() },
+                showVisualGuides: configuration.showVisualGuides
             )
         case .liveness:
             // Liveness requires a session; start by creating one

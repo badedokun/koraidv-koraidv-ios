@@ -51,6 +51,16 @@ public struct Configuration {
     /// Optional per-outcome copy overrides for the simplified result page.
     public var customMessages: ResultPageMessages?
 
+    /// REQ-003 — show rich Canvas-drawn capture/liveness illustrations.
+    ///
+    /// **iOS support: NOT YET IMPLEMENTED.** This field exists so RN/Flutter
+    /// SDK consumers can pass `showVisualGuides: true` without it crashing
+    /// or being silently dropped at the bridge. On Android the equivalent
+    /// flag renders the v1.3.0 VisualGuides Canvas drawings. iOS will gain
+    /// an equivalent SwiftUI implementation in a later release; until then
+    /// this is a typed no-op (the SDK accepts it but renders nothing extra).
+    public var showVisualGuides: Bool
+
     // MARK: - Initialization
 
     /// Initialize SDK configuration
@@ -96,6 +106,7 @@ public struct Configuration {
         self.debugLogging = false
         self.resultPageMode = .detailed
         self.customMessages = nil
+        self.showVisualGuides = false
     }
 }
 

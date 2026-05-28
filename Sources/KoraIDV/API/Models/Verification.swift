@@ -243,19 +243,43 @@ struct UploadDocumentBackRequest: Encodable {
     let decodedBarcodePayload: String?
 }
 
-/// Liveness session
-struct LivenessSession: Decodable {
+/// Liveness session (domain model — consumed by UI).
+///
+/// Constructed by mapping `LivenessSessionDTO` (the wire shape) — see
+/// SessionManager.createLivenessSession for the DTO→domain projection.
+/// Fields here include client-derived values (`id`-synthesized challenge
+/// ids, locale-derived instructions, position-derived order, default
+/// `expiresAt`) because the backend response does not carry them.
+struct LivenessSession {
     let sessionId: String
     let challenges: [LivenessChallenge]
     let expiresAt: Date
 }
 
-/// Liveness challenge
-public struct LivenessChallenge: Decodable {
+/// Liveness challenge (domain model — consumed by UI).
+public struct LivenessChallenge {
     public let id: String
     public let type: ChallengeType
     public let instruction: String
     public let order: Int
+}
+
+/// Wire-format DTO for the backend's `/v1/verifications/{id}/liveness/session`
+/// response (matches `models.LivenessSession` in the Go identity-service).
+/// The backend sends `id` (not `sessionId`), omits `expiresAt`, and the
+/// nested challenge entries carry only `type` (no `id`, `instruction`,
+/// or `order`). Domain-shaping happens in SessionManager — see the
+/// android sibling at `koraidv-android/.../SessionManager.kt:240` for
+/// the equivalent mapper.
+struct LivenessSessionDTO: Decodable {
+    let id: String
+    let challenges: [LivenessChallengeDTO]
+}
+
+/// Wire-format DTO for a single challenge entry inside the liveness
+/// session response. Only `type` is populated by the backend.
+struct LivenessChallengeDTO: Decodable {
+    let type: ChallengeType
 }
 
 /// Challenge type

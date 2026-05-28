@@ -159,7 +159,20 @@ public final class SessionManager {
         )
     }
 
-    /// Create liveness session
+    /// Create liveness session.
+    ///
+    /// Decodes the wire DTO (matches backend's `models.LivenessSession`
+    /// JSON), then projects it onto the domain `LivenessSession` the UI
+    /// expects. The backend doesn't send `sessionId`/`expiresAt`, and
+    /// per-challenge `id`/`instruction`/`order` aren't on the wire — the
+    /// domain values are synthesized client-side here. Mirrors the
+    /// Android pattern at koraidv-android/.../SessionManager.kt:240.
+    ///
+    /// Before this DTO/domain split, the SDK decoded directly into
+    /// `LivenessSession` with non-optional fields the server doesn't
+    /// send, so the first liveness call after a successful selfie threw
+    /// `keyNotFound` ("data couldn't be read because it is missing").
+    /// Surfaced by BanffPay 2026-05-28.
     func createLivenessSession(
         verificationId: String,
         completion: @escaping (Result<LivenessSession, KoraError>) -> Void
@@ -168,8 +181,42 @@ public final class SessionManager {
             endpoint: .createLivenessSession(id: verificationId),
             method: .post,
             body: EmptyBody()
-        ) { (result: Result<LivenessSession, KoraError>) in
-            completion(result)
+        ) { (result: Result<LivenessSessionDTO, KoraError>) in
+            switch result {
+            case .success(let dto):
+                let session = LivenessSession(
+                    sessionId: dto.id,
+                    challenges: dto.challenges.enumerated().map { index, challenge in
+                        LivenessChallenge(
+                            id: "\(dto.id)_\(index)",
+                            type: challenge.type,
+                            instruction: Self.instructionForChallengeType(challenge.type),
+                            order: index
+                        )
+                    },
+                    // Backend doesn't return expiresAt; the SDK enforces a
+                    // local 5-minute timeout consistent with the Android peer.
+                    expiresAt: Date(timeIntervalSinceNow: 300)
+                )
+                completion(.success(session))
+            case .failure(let err):
+                completion(.failure(err))
+            }
+        }
+    }
+
+    /// Client-side instruction text for a liveness challenge type. Mirrors
+    /// the Android peer's `getInstructionForType`. Not localized yet —
+    /// matches the Android English defaults for the v1.7.0 cutover; pull
+    /// into L10n on the next pass.
+    private static func instructionForChallengeType(_ type: ChallengeType) -> String {
+        switch type {
+        case .blink: return "Blink your eyes slowly"
+        case .smile: return "Smile naturally"
+        case .turnLeft: return "Slowly turn your head to the left"
+        case .turnRight: return "Slowly turn your head to the right"
+        case .nodUp: return "Slowly tilt your head up"
+        case .nodDown: return "Slowly tilt your head down"
         }
     }
 

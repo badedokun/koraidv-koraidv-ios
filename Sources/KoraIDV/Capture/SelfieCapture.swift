@@ -93,6 +93,15 @@ final class SelfieCapture: NSObject {
         autoCaptureCounter = 0
     }
 
+    /// Re-arm the capture engine for a retake. Releases the isCapturing
+    /// gate that was held through validation/anti-spoof/delegate and
+    /// resets the auto-capture counter so frame accumulation starts
+    /// fresh. Call after the user taps Retake on the review screen.
+    func resetForRetake() {
+        isCapturing = false
+        autoCaptureCounter = 0
+    }
+
     // MARK: - Private Methods
 
     private func processFrame(_ sampleBuffer: CMSampleBuffer) {
@@ -135,10 +144,20 @@ final class SelfieCapture: NSObject {
 extension SelfieCapture: CameraManagerDelegate {
 
     func cameraManager(_ manager: CameraManager, didCapturePhoto imageData: Data) {
-        isCapturing = false
+        // Keep isCapturing=true through the entire async validation +
+        // anti-spoof + compress + delegate.didCapture pipeline. Resetting
+        // here would let the sample-buffer path (line ~190) re-enter
+        // processFrame → handleFaceDetection → autoCaptureCounter →
+        // capture() before the first capture's delegate callback has
+        // even fired, causing the multi-shutter "rapid snap" defect
+        // BanffPay reported 2026-05-28. Mirrors the gate pattern
+        // DocumentCaptureView shipped in v1.6.3 for the same class of
+        // bug on the document side. Reset happens via resetForRetake()
+        // when the user taps Retake, or via stop() when the flow ends.
 
         // Validate quality
         guard let image = UIImage(data: imageData) else {
+            isCapturing = false
             delegate?.selfieCapture(self, didFail: .captureFailed("Invalid image data"))
             return
         }
@@ -161,13 +180,17 @@ extension SelfieCapture: CameraManagerDelegate {
                 let spoofResult = self.antiSpoofCheck.analyze(image)
                 if !spoofResult.isLikelyReal {
                     DispatchQueue.main.async {
+                        self.isCapturing = false
                         self.delegate?.selfieCapture(self, didFail: .qualityValidationFailed(["Image appears to be a photo of a screen or printed image"]))
                         self.resetAutoCapture()
                     }
                     return
                 }
 
-                // Compress image
+                // Compress image. isCapturing remains true — only resetForRetake()
+                // or stop() releases the gate so the sample-buffer path can't
+                // start a second capture while the ViewModel is on the review
+                // screen.
                 if let compressedData = image.jpegData(compressionQuality: 0.85) {
                     DispatchQueue.main.async {
                         self.delegate?.selfieCapture(self, didCapture: compressedData)
@@ -180,6 +203,7 @@ extension SelfieCapture: CameraManagerDelegate {
             } else {
                 let issues = validation.issues.map { $0.message }
                 DispatchQueue.main.async {
+                    self.isCapturing = false
                     self.delegate?.selfieCapture(self, didFail: .qualityValidationFailed(issues))
                     self.resetAutoCapture()
                 }

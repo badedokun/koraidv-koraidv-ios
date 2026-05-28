@@ -8,6 +8,9 @@ struct LivenessView: View {
     let onChallengeComplete: (LivenessChallenge, Data) -> Void
     let onAllComplete: () -> Void
     let onCancel: () -> Void
+    /// REQ-003 · render the per-challenge VisualGuide illustration above
+    /// the oval. Defaults to false to preserve existing minimal-icon UI.
+    let showVisualGuides: Bool
 
     @StateObject private var viewModel: LivenessViewModel
 
@@ -16,13 +19,15 @@ struct LivenessView: View {
         theme: KoraTheme,
         onChallengeComplete: @escaping (LivenessChallenge, Data) -> Void,
         onAllComplete: @escaping () -> Void,
-        onCancel: @escaping () -> Void
+        onCancel: @escaping () -> Void,
+        showVisualGuides: Bool = false
     ) {
         self.session = session
         self.theme = theme
         self.onChallengeComplete = onChallengeComplete
         self.onAllComplete = onAllComplete
         self.onCancel = onCancel
+        self.showVisualGuides = showVisualGuides
         _viewModel = StateObject(wrappedValue: LivenessViewModel(session: session))
     }
 
@@ -56,6 +61,11 @@ struct LivenessView: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
                         .accessibilityAddTraits(.isHeader)
+                    if showVisualGuides {
+                        VisualGuide(kind: challengeToGuide(challenge.type))
+                            .padding(.horizontal, 32)
+                            .padding(.top, 12)
+                    }
                 } else {
                     Text(L10n.tr("koraidv.liveness.preparing"))
                         .font(.system(size: 24, weight: .bold))

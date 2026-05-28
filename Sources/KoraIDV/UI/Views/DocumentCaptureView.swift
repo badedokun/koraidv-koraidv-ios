@@ -9,6 +9,10 @@ struct DocumentCaptureView: View {
     let theme: KoraTheme
     let onCapture: (Data) -> Void
     let onCancel: () -> Void
+    /// REQ-003 · render VisualGuide.docFront / .docBack overlay alongside
+    /// the dashed capture frame. Defaults to false to preserve existing
+    /// minimal-icon UI for callers that don't opt in.
+    var showVisualGuides: Bool = false
 
     @StateObject private var viewModel = DocumentCaptureViewModel()
     @State private var showReview = false
@@ -80,6 +84,12 @@ struct DocumentCaptureView: View {
                 }
 
                 Spacer().frame(height: 16)
+
+                if showVisualGuides {
+                    VisualGuide(kind: side == .front ? .docFront : .docBack)
+                        .padding(.horizontal, 32)
+                        .padding(.bottom, 12)
+                }
 
                 // Guidance pill
                 GuidancePill(

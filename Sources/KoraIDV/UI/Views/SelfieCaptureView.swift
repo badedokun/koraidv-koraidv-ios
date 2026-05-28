@@ -6,6 +6,10 @@ struct SelfieCaptureView: View {
     let theme: KoraTheme
     let onCapture: (Data) -> Void
     let onCancel: () -> Void
+    /// REQ-003 · render the rich VisualGuide illustration above the oval
+    /// when set. Defaults to false to preserve existing minimal-icon UI
+    /// for callers that don't opt in.
+    var showVisualGuides: Bool = false
 
     @StateObject private var viewModel = SelfieCaptureViewModel()
     @State private var showReview = false
@@ -64,6 +68,12 @@ struct SelfieCaptureView: View {
                     .font(.system(size: 15))
                     .foregroundColor(.white.opacity(0.5))
                     .padding(.top, 4)
+
+                if showVisualGuides {
+                    VisualGuide(kind: .selfie)
+                        .padding(.horizontal, 32)
+                        .padding(.top, 12)
+                }
 
                 Spacer().frame(height: 24)
 
@@ -188,6 +198,12 @@ struct SelfieCaptureView: View {
                     action: {
                         showReview = false
                         capturedImageData = nil
+                        // Re-arm the capture engine so auto-capture can fire
+                        // again — without this, the isCapturing gate held
+                        // through the first capture stays latched and the
+                        // camera never re-triggers (see SelfieCapture.swift
+                        // resetForRetake docstring).
+                        viewModel.selfieCapture.resetForRetake()
                     },
                     variant: .darkOutline
                 )
