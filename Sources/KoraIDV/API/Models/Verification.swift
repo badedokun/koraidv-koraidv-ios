@@ -298,10 +298,23 @@ struct LivenessChallengeMetadata: Encodable {
     let challengeId: String
 }
 
-/// Document quality check request
+/// Document quality check request.
+///
+/// The `/kyc/document-quality` endpoint is the one outlier in
+/// identity-service still using snake_case JSON tags
+/// (`document_front_base64`, `document_type`). Explicit CodingKeys
+/// ensure the encoder produces snake_case on the wire regardless of
+/// any keyEncodingStrategy default. Latent bug found via the Web SDK
+/// in 2026-05-29; iOS hadn't surfaced it because no production iOS
+/// flow currently calls `checkDocumentQuality`.
 struct CheckDocumentQualityRequest: Encodable {
     let documentFrontBase64: String
     let documentType: String
+
+    enum CodingKeys: String, CodingKey {
+        case documentFrontBase64 = "document_front_base64"
+        case documentType = "document_type"
+    }
 }
 
 /// Document quality check response
