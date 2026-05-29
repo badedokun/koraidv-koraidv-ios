@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'KoraIDV'
-  s.version          = '1.7.1'
+  s.version          = '1.7.2'
   s.summary          = 'Kora IDV Identity Verification SDK for iOS'
   s.description      = <<-DESC
     KoraIDV SDK enables seamless identity verification in your iOS applications.
