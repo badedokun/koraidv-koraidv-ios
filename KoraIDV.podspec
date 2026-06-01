@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'KoraIDV'
-  s.version          = '1.8.3'
+  s.version          = '1.8.4'
   s.summary          = 'Kora IDV Identity Verification SDK for iOS'
   s.description      = <<-DESC
     KoraIDV SDK enables seamless identity verification in your iOS applications.
@@ -13,7 +13,7 @@ Pod::Spec.new do |s|
   s.author           = { 'Korastratum' => 'support@korastratum.com' }
   s.source           = { :git => 'https://github.com/badedokun/koraidv-koraidv-ios.git', :tag => "v#{s.version}" }
 
-  s.ios.deployment_target = '14.0'
+  s.ios.deployment_target = '15.0'
   s.swift_version = '5.7'
 
   s.source_files = 'Sources/KoraIDV/**/*.swift'
