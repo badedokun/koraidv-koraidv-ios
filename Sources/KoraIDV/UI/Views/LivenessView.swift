@@ -133,20 +133,24 @@ struct LivenessView: View {
 
 // MARK: - Liveness Camera Preview
 
+/// SwiftUI bridge to the AVFoundation camera preview for the liveness flow.
+///
+/// v1.8.6: rewritten to use `CameraPreviewUIView` (see CameraManager.swift).
+/// See the `CameraPreviewUIView` docstring + the parallel `CameraPreviewView`
+/// in DocumentCaptureView.swift for the full root cause of the dark-preview
+/// bug this fix addresses.
 struct LivenessCameraPreviewView: UIViewRepresentable {
     let livenessManager: LivenessManager
 
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: .zero)
-        let previewLayer = livenessManager.createPreviewLayer(for: view)
-        view.layer.addSublayer(previewLayer)
+    func makeUIView(context: Context) -> CameraPreviewUIView {
+        let view = CameraPreviewUIView()
+        view.videoPreviewLayer.session = livenessManager.cameraManager.captureSession
+        view.videoPreviewLayer.videoGravity = .resizeAspectFill
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
-        if let previewLayer = uiView.layer.sublayers?.first as? AVCaptureVideoPreviewLayer {
-            previewLayer.frame = uiView.bounds
-        }
+    func updateUIView(_ uiView: CameraPreviewUIView, context: Context) {
+        // No-op: UIKit auto-resizes the preview layer.
     }
 }
 

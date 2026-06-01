@@ -313,20 +313,33 @@ struct CornerShape: Shape {
 
 // MARK: - Camera Preview View
 
+/// SwiftUI bridge to the AVFoundation camera preview.
+///
+/// v1.8.6: rewritten to use `CameraPreviewUIView` (see CameraManager.swift),
+/// whose root layer IS an `AVCaptureVideoPreviewLayer`. UIKit's layout system
+/// resizes the layer automatically as the SwiftUI parent resolves geometry.
+///
+/// The previous pattern (`UIView(frame: .zero)` + `addSublayer` + manual
+/// frame management in `updateUIView`) left the preview layer at zero-size
+/// because `updateUIView` doesn't fire on initial bounds resolution — every
+/// document/selfie/liveness preview rendered dark to the user. See the
+/// `CameraPreviewUIView` docstring for the full root cause.
+///
+/// Reused by `SelfieCaptureView` — fixing this struct fixes selfie preview
+/// automatically (it's the same UIViewRepresentable).
 struct CameraPreviewView: UIViewRepresentable {
     let cameraManager: CameraManager
 
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: .zero)
-        let previewLayer = cameraManager.createPreviewLayer(for: view)
-        view.layer.addSublayer(previewLayer)
+    func makeUIView(context: Context) -> CameraPreviewUIView {
+        let view = CameraPreviewUIView()
+        view.videoPreviewLayer.session = cameraManager.captureSession
+        view.videoPreviewLayer.videoGravity = .resizeAspectFill
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
-        if let previewLayer = uiView.layer.sublayers?.first as? AVCaptureVideoPreviewLayer {
-            previewLayer.frame = uiView.bounds
-        }
+    func updateUIView(_ uiView: CameraPreviewUIView, context: Context) {
+        // No-op: UIKit auto-resizes the preview layer as the view's bounds
+        // change because the layer IS the root layer.
     }
 }
 

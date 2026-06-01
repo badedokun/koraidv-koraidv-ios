@@ -32,7 +32,12 @@ final class LivenessManager: NSObject {
 
     weak var delegate: LivenessManagerDelegate?
 
-    private let cameraManager = CameraManager()
+    /// CameraManager visibility relaxed from `private` to internal in v1.8.6
+    /// so `LivenessCameraPreviewView` can read its `captureSession` directly
+    /// when binding the SwiftUI preview. Matches `SelfieCapture.cameraManager`
+    /// which has always been internal. See `CameraPreviewUIView` docstring in
+    /// CameraManager.swift for the full Bug 1 root cause.
+    let cameraManager = CameraManager()
     private let faceDetector = FaceDetector()
     private let challengeDetector = ChallengeDetector()
     private let antiSpoofCheck = AntiSpoofCheck()

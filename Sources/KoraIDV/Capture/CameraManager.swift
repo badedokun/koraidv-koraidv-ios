@@ -21,7 +21,17 @@ final class CameraManager: NSObject {
 
     weak var delegate: CameraManagerDelegate?
 
-    private let captureSession = AVCaptureSession()
+    /// AVCaptureSession backing all preview + capture.
+    ///
+    /// Visibility relaxed from `private` to internal (module-default) in v1.8.6
+    /// so `CameraPreviewUIView` (defined below) can attach it directly to a
+    /// `UIView` whose `layerClass` is `AVCaptureVideoPreviewLayer`. This is the
+    /// canonical SwiftUI+AVFoundation preview pattern; the previous flow
+    /// (`createPreviewLayer(for:)` + `view.layer.addSublayer`) wrote
+    /// `layer.frame = view.bounds` at a moment when `bounds` was still `.zero`,
+    /// leaving every preview at zero-size and invisible to the user. See
+    /// `CameraPreviewUIView` documentation at the bottom of this file.
+    let captureSession = AVCaptureSession()
     private var photoOutput: AVCapturePhotoOutput?
     private var videoOutput: AVCaptureVideoDataOutput?
     private var currentDevice: AVCaptureDevice?
@@ -271,5 +281,43 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         from connection: AVCaptureConnection
     ) {
         delegate?.cameraManager(self, didOutput: sampleBuffer)
+    }
+}
+
+// MARK: - Camera Preview UIView
+
+/// `UIView` subclass whose root layer IS an `AVCaptureVideoPreviewLayer`.
+///
+/// Use via the SwiftUI `UIViewRepresentable` pattern (see `CameraPreviewView`
+/// in `DocumentCaptureView.swift` and `LivenessCameraPreviewView` in
+/// `LivenessView.swift`).
+///
+/// Why this exists: prior to v1.8.6, every camera preview in the SDK was built
+/// by creating a `UIView(frame: .zero)`, calling `cameraManager.createPreviewLayer(for: view)`,
+/// and adding the returned `AVCaptureVideoPreviewLayer` as a sublayer. The
+/// preview layer's `frame` was set to `view.bounds` at the moment of creation
+/// — but at that moment `bounds` was still `.zero`, because SwiftUI hadn't
+/// resolved the parent geometry yet. The only place that re-set the layer
+/// frame was `UIViewRepresentable.updateUIView`, which fires on data-binding
+/// changes, not on the initial bounds resolution. Net result: the preview
+/// layer stayed at zero size forever and the user never saw a camera feed,
+/// even though the capture session was healthy underneath and captured photos
+/// landed correctly.
+///
+/// The fix is the canonical SwiftUI+AVFoundation pattern: make the root layer
+/// of a `UIView` BE the `AVCaptureVideoPreviewLayer` by overriding
+/// `layerClass`. UIKit's normal layout system then resizes it automatically
+/// whenever the view's bounds change — no manual frame management needed and
+/// no `updateUIView` work to maintain layout.
+///
+/// Surfaced by Stratum Remit team on 2026-06-01 (iPhone 12 + iPhone 15 Pro
+/// Max both reproduced); fix lands in v1.8.6.
+final class CameraPreviewUIView: UIView {
+    override class var layerClass: AnyClass {
+        AVCaptureVideoPreviewLayer.self
+    }
+
+    var videoPreviewLayer: AVCaptureVideoPreviewLayer {
+        layer as! AVCaptureVideoPreviewLayer
     }
 }
