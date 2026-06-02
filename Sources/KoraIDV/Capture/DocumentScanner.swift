@@ -8,6 +8,16 @@ struct DocumentDetectionResult {
     let confidence: Float
     let corners: [CGPoint]
     let isStable: Bool
+    /// User-facing guidance when the document is detected but its framing
+    /// would produce a poor capture. `nil` when framing is acceptable.
+    ///
+    /// Mirrors Android `DocumentDetectionResult.qualityGuidance` — the
+    /// auto-capture gate in `DocumentCaptureView` suppresses firing when
+    /// this is non-nil regardless of stability. Without this gate the SDK
+    /// would let users tap "Looks good" on a capture where the document
+    /// occupies ~6% of the frame, then send the unusable image to server
+    /// OCR (BanffPay/Stratum Remit reproduction 2026-06-01).
+    let qualityGuidance: String?
 }
 
 /// Document Scanner using Vision framework
@@ -20,7 +30,30 @@ final class DocumentScanner {
 
     private var lastObservation: VNRectangleObservation?
     private var stabilityCounter = 0
-    private let stabilityThreshold = 2
+
+    // v1.8.6: stability gate relaxed to match Android (koraidv-android
+    // DocumentScanner.kt: `stabilityThreshold = 1`, `stabilityTolerance = 0.10f`).
+    //
+    // Pre-1.8.6 iOS required `2` consecutive stable frames where every
+    // corner moved less than `0.02` ABSOLUTE distance in normalized
+    // [0..1] coords — i.e. < 2% of frame width. That's tighter than
+    // natural hand jitter on a handheld phone, so stability never
+    // converged and auto-capture never fired even though the detector
+    // was correctly locating the document (Stratum Remit reproduction
+    // 2026-06-01, iPhone 12 and iPhone 15 Pro Max both affected).
+    // Android's 10% RELATIVE tolerance + 1 stable frame has been
+    // shipping cleanly through real handheld captures. Porting parity.
+    private let stabilityThreshold = 1
+    private let stabilityTolerance: CGFloat = 0.10
+
+    // v1.8.6: coverage thresholds for the new `qualityGuidance` gate.
+    // Same values Android uses. Below the lower bound = document too
+    // small for usable OCR / PDF417; above the upper = clipped at
+    // frame edges. Caller's auto-capture gate suppresses firing when
+    // coverage is out of range AND surfaces the guidance string to
+    // the user so they know how to recover.
+    private let minCoverage: CGFloat = 0.35
+    private let maxCoverage: CGFloat = 0.85
 
     /// Minimum confidence for document detection
     var minimumConfidence: Float = 0.7
@@ -74,11 +107,25 @@ final class DocumentScanner {
                 observation.bottomLeft
             ]
 
+            // v1.8.6: compute coverage (document area / frame area) and
+            // emit guidance when the framing is unworkable. Caller
+            // suppresses auto-capture when guidance is non-nil.
+            let coverage = observation.boundingBox.width * observation.boundingBox.height
+            let qualityGuidance: String?
+            if coverage < self.minCoverage {
+                qualityGuidance = "Move closer to the document"
+            } else if coverage > self.maxCoverage {
+                qualityGuidance = "Move further from the document"
+            } else {
+                qualityGuidance = nil
+            }
+
             let result = DocumentDetectionResult(
                 observation: observation,
                 confidence: observation.confidence,
                 corners: corners,
-                isStable: isStable
+                isStable: isStable,
+                qualityGuidance: qualityGuidance
             )
 
             completion(result)
@@ -145,7 +192,8 @@ final class DocumentScanner {
                 observation: observation,
                 confidence: observation.confidence,
                 corners: corners,
-                isStable: true // Single image, always "stable"
+                isStable: true, // Single image, always "stable"
+                qualityGuidance: nil // Single-image path is not user-handheld
             )
 
             completion(result)
@@ -247,21 +295,22 @@ final class DocumentScanner {
         guard let last = lastObservation else {
             lastObservation = observation
             stabilityCounter = 1
-            return false
+            // First detection — single-frame stability gate (stabilityThreshold=1)
+            // means this counts as stable immediately. The old 2-frame gate
+            // returned false here and required a second matching frame.
+            return stabilityCounter >= stabilityThreshold
         }
 
-        // Check if corners are similar to last observation
-        let threshold: CGFloat = 0.02
-
-        let topLeftDiff = distance(observation.topLeft, last.topLeft)
-        let topRightDiff = distance(observation.topRight, last.topRight)
-        let bottomLeftDiff = distance(observation.bottomLeft, last.bottomLeft)
-        let bottomRightDiff = distance(observation.bottomRight, last.bottomRight)
-
-        let isStable = topLeftDiff < threshold &&
-                       topRightDiff < threshold &&
-                       bottomLeftDiff < threshold &&
-                       bottomRightDiff < threshold
+        // v1.8.6: stability check changed from absolute distance (0.02 in
+        // normalized [0..1] coords) to relative per-axis tolerance
+        // (0.10 * corner position). Matches Android's Math.abs(dx) /
+        // corner.x.coerceAtLeast(1f). Real-world handheld jitter on a
+        // phone moves corners by ~5-10% per frame; the old absolute
+        // threshold of 2% never converged.
+        let isStable = isCornerStable(observation.topLeft, last.topLeft) &&
+                       isCornerStable(observation.topRight, last.topRight) &&
+                       isCornerStable(observation.bottomLeft, last.bottomLeft) &&
+                       isCornerStable(observation.bottomRight, last.bottomRight)
 
         if isStable {
             stabilityCounter += 1
@@ -272,6 +321,17 @@ final class DocumentScanner {
         lastObservation = observation
 
         return stabilityCounter >= stabilityThreshold
+    }
+
+    /// Per-axis relative-tolerance corner stability check. Matches the
+    /// Android `Math.abs(dx) / corner.x.coerceAtLeast(1f)` pattern.
+    /// Uses the current corner position as the denominator (with a
+    /// floor of a small epsilon so corners near the origin don't
+    /// produce a divide-by-near-zero).
+    private func isCornerStable(_ current: CGPoint, _ previous: CGPoint) -> Bool {
+        let dx = abs(current.x - previous.x) / max(current.x, 0.001)
+        let dy = abs(current.y - previous.y) / max(current.y, 0.001)
+        return dx <= stabilityTolerance && dy <= stabilityTolerance
     }
 
     private func distance(_ p1: CGPoint, _ p2: CGPoint) -> CGFloat {

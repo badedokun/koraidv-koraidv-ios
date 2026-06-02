@@ -373,6 +373,22 @@ class DocumentCaptureViewModel: ObservableObject {
     /// had the equivalent guard.
     private var hasPendingReview = false
 
+    /// Timestamp of the first frame in the current detection burst.
+    /// Cleared whenever detection drops (result is nil) and on retake.
+    /// Used by the v1.8.6 3-second force-capture gate to fire even
+    /// when per-frame stability never converges — matches Android's
+    /// `firstDetectedTime` deadline pattern in CaptureScreens.kt. Without
+    /// this fallback, iPhones with slightly noisier detection output
+    /// would loop forever in "Scanning document..." even with the
+    /// stability tolerance relaxed (Stratum Remit reproduction
+    /// 2026-06-01).
+    private var firstDetectedTime: Date?
+
+    /// Force-capture deadline once a document has been continuously
+    /// detected for this long with acceptable coverage. Same value
+    /// Android uses (3000ms in CaptureScreens.kt).
+    private let forceCaptureDeadline: TimeInterval = 3.0
+
     func startCapture(onCapture: @escaping (Data) -> Void) {
         self.onCapture = onCapture
 
@@ -401,6 +417,10 @@ class DocumentCaptureViewModel: ObservableObject {
     func clearPendingReview() {
         hasPendingReview = false
         isProcessing = false
+        // Reset the force-capture deadline so retake starts fresh
+        // instead of inheriting a stale timestamp from the prior burst.
+        firstDetectedTime = nil
+        documentScanner.resetStability()
     }
 
     func captureManually() {
@@ -451,23 +471,50 @@ extension DocumentCaptureViewModel: CameraManagerDelegate {
 
         documentScanner.detectDocument(in: pixelBuffer) { [weak self] result in
             DispatchQueue.main.async {
-                if let result = result {
-                    self?.isDocumentDetected = true
+                guard let self = self else { return }
 
-                    if result.isStable {
-                        self?.feedbackMessage = "Hold steady..."
-                        // Same double-gate as the entry guard: both
-                        // `isCapturing` and `hasPendingReview` must be
-                        // clear before firing.
-                        if self?.isCapturing == false && self?.hasPendingReview == false {
-                            self?.captureManually()
-                        }
-                    } else {
-                        self?.feedbackMessage = nil
-                    }
+                guard let result = result else {
+                    self.isDocumentDetected = false
+                    self.feedbackMessage = "Position document within the frame"
+                    // Detection dropped — reset the force-capture deadline
+                    // so a brief flicker doesn't accidentally satisfy the
+                    // 3-second window on the next frame.
+                    self.firstDetectedTime = nil
+                    return
+                }
+
+                self.isDocumentDetected = true
+
+                // v1.8.6: coverage gate runs BEFORE stability. If framing
+                // is unworkable (doc too small or too large), surface the
+                // guidance and suppress auto-capture regardless of how
+                // stable the user's hands are. Matches Android.
+                if let guidance = result.qualityGuidance {
+                    self.feedbackMessage = guidance
+                    self.firstDetectedTime = nil
+                    return
+                }
+
+                // Coverage is acceptable. Start (or continue) the
+                // force-capture deadline timer.
+                if self.firstDetectedTime == nil {
+                    self.firstDetectedTime = Date()
+                }
+
+                let elapsed = self.firstDetectedTime.map { Date().timeIntervalSince($0) } ?? 0
+                let forceCapture = elapsed >= self.forceCaptureDeadline
+
+                let shouldCapture = (result.isStable || forceCapture) &&
+                                    !self.isCapturing &&
+                                    !self.hasPendingReview
+
+                if shouldCapture {
+                    self.feedbackMessage = "Hold steady..."
+                    self.captureManually()
                 } else {
-                    self?.isDocumentDetected = false
-                    self?.feedbackMessage = "Position document within the frame"
+                    // Detection + acceptable coverage but waiting on
+                    // stability or the deadline. Keep the user oriented.
+                    self.feedbackMessage = "Hold steady..."
                 }
             }
         }
