@@ -31,6 +31,25 @@ final class DocumentScanner {
     private var lastObservation: VNRectangleObservation?
     private var stabilityCounter = 0
 
+    // v1.8.6-rc3: tolerate transient detection misses without resetting the
+    // detection burst. Vision's segmentation is intermittent on busy or
+    // patterned backgrounds (Stratum Remit reproduction: NJ DL on a floral
+    // tablecloth) — without this counter, every single missed frame reset
+    // `firstDetectedTime` upstream, so the 3-second force-capture deadline
+    // never elapsed and auto-capture only fired by accident at moments
+    // when stability and detection both happened to align with the user's
+    // hand mid-motion (hence "captures outside the frame"). Matches
+    // Android's `noDetectionThreshold = 3` in DocumentScanner.kt.
+    private var noDetectionCounter = 0
+    private let noDetectionThreshold = 3
+
+    /// Most recent successful detection result. Returned to callers when
+    /// the current frame's detection misses but the miss count is still
+    /// under threshold — keeps the detection burst alive across single-
+    /// frame Vision dropouts. Cleared when miss count >= threshold OR
+    /// when `resetStability()` is called (retake path).
+    private var lastDetectionResult: DocumentDetectionResult?
+
     // v1.8.6: stability gate relaxed to match Android (koraidv-android
     // DocumentScanner.kt: `stabilityThreshold = 1`, `stabilityTolerance = 0.10f`).
     //
@@ -73,29 +92,30 @@ final class DocumentScanner {
 
             if let error = error {
                 KoraIDV.log("Document detection error: \(error)")
-                completion(nil)
+                self.handleNoDetection(completion: completion)
                 return
             }
 
             guard let observation = request.results?.first as? VNRectangleObservation else {
-                self.lastObservation = nil
-                self.stabilityCounter = 0
-                completion(nil)
+                self.handleNoDetection(completion: completion)
                 return
             }
 
             // Check confidence
             guard observation.confidence >= self.minimumConfidence else {
-                completion(nil)
+                self.handleNoDetection(completion: completion)
                 return
             }
 
             // Check aspect ratio
             let aspectRatio = Float(observation.boundingBox.width / observation.boundingBox.height)
             guard aspectRatio >= self.minimumAspectRatio && aspectRatio <= self.maximumAspectRatio else {
-                completion(nil)
+                self.handleNoDetection(completion: completion)
                 return
             }
+
+            // Successful detection — clear the miss counter.
+            self.noDetectionCounter = 0
 
             // Check stability
             let isStable = self.checkStability(observation)
@@ -128,6 +148,8 @@ final class DocumentScanner {
                 qualityGuidance: qualityGuidance
             )
 
+            // Cache for transient-miss tolerance on subsequent frames.
+            self.lastDetectionResult = result
             completion(result)
         }
 
@@ -344,5 +366,23 @@ final class DocumentScanner {
     func resetStability() {
         lastObservation = nil
         stabilityCounter = 0
+        noDetectionCounter = 0
+        lastDetectionResult = nil
+    }
+
+    /// Unified miss-handling path. On the first `noDetectionThreshold - 1`
+    /// misses, returns the last successful detection so the caller's
+    /// detection burst stays alive across single-frame Vision dropouts.
+    /// On the threshold-th miss, fully clears state and returns nil.
+    private func handleNoDetection(completion: @escaping (DocumentDetectionResult?) -> Void) {
+        noDetectionCounter += 1
+        if noDetectionCounter >= noDetectionThreshold {
+            lastObservation = nil
+            stabilityCounter = 0
+            lastDetectionResult = nil
+            completion(nil)
+        } else {
+            completion(lastDetectionResult)
+        }
     }
 }

@@ -267,7 +267,70 @@ extension CameraManager: AVCapturePhotoCaptureDelegate {
             return
         }
 
-        delegate?.cameraManager(self, didCapturePhoto: imageData)
+        // v1.8.6-rc3: crop the captured photo to match the video preview's
+        // aspect ratio (9:16 portrait under sessionPreset.high). Without
+        // this, the photo output captures at full sensor (typically 4:3),
+        // which includes MORE content above and below than the user saw in
+        // the 9:16 preview — a document that filled 35% of the preview
+        // would only fill ~20% of the captured photo. Stratum Remit's
+        // 2026-06-03 reproduction caught this as "DL appears tiny in
+        // review screen" (Bug 2 screenshot 114). Aligning aspects makes
+        // what-you-saw-in-preview = what-was-captured.
+        let croppedData = cropToVideoAspect(imageData) ?? imageData
+        delegate?.cameraManager(self, didCapturePhoto: croppedData)
+    }
+
+    /// Crops the captured photo to match the video preview's aspect ratio
+    /// (9:16 portrait under sessionPreset.high). Uses `UIGraphicsImageRenderer`
+    /// to handle orientation correctly — `UIImage.draw(at:)` respects the
+    /// image's `imageOrientation`, so the rendered output is always in
+    /// display orientation regardless of how the underlying CGImage was
+    /// stored. Returns nil if the data can't be decoded; caller falls
+    /// back to the original uncropped data in that case.
+    private func cropToVideoAspect(_ data: Data) -> Data? {
+        guard let originalImage = UIImage(data: data) else { return nil }
+
+        // Display-oriented size (post-EXIF rotation).
+        let imageSize = originalImage.size
+        guard imageSize.width > 0, imageSize.height > 0 else { return nil }
+
+        // Target aspect = 9:16 portrait (matches AVCaptureSession.Preset.high
+        // video frames after .portrait orientation rotation: 1920x1080
+        // landscape → 1080x1920 portrait). Keep in sync with sessionPreset
+        // if that is ever changed in setupSession.
+        let targetAspect: CGFloat = 9.0 / 16.0  // width / height
+        let imageAspect = imageSize.width / imageSize.height
+
+        // Already-matching aspect — no-op (saves a re-encode round trip).
+        if abs(imageAspect - targetAspect) < 0.001 {
+            return data
+        }
+
+        // Compute center-cropped target rect.
+        let cropSize: CGSize
+        if imageAspect > targetAspect {
+            // Image is wider than target — trim width.
+            cropSize = CGSize(width: imageSize.height * targetAspect, height: imageSize.height)
+        } else {
+            // Image is taller than target — trim height.
+            cropSize = CGSize(width: imageSize.width, height: imageSize.width / targetAspect)
+        }
+        let cropOrigin = CGPoint(
+            x: (imageSize.width - cropSize.width) / 2,
+            y: (imageSize.height - cropSize.height) / 2
+        )
+
+        // Render the cropped region. UIGraphicsImageRenderer respects the
+        // source image's orientation, so `draw(at:)` blits in display
+        // coordinates and the output is always upright.
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = originalImage.scale
+        let renderer = UIGraphicsImageRenderer(size: cropSize, format: format)
+        let cropped = renderer.image { _ in
+            originalImage.draw(at: CGPoint(x: -cropOrigin.x, y: -cropOrigin.y))
+        }
+
+        return cropped.jpegData(compressionQuality: 0.9)
     }
 }
 
