@@ -66,16 +66,40 @@ final class DocumentScanner {
     private let stabilityTolerance: CGFloat = 0.10
 
     // v1.8.6: coverage thresholds for the new `qualityGuidance` gate.
-    // Same values Android uses. Below the lower bound = document too
-    // small for usable OCR / PDF417; above the upper = clipped at
-    // frame edges. Caller's auto-capture gate suppresses firing when
-    // coverage is out of range AND surfaces the guidance string to
-    // the user so they know how to recover.
-    private let minCoverage: CGFloat = 0.35
+    // Below the lower bound = document too small for usable OCR /
+    // PDF417; above the upper = clipped at frame edges. Caller's
+    // auto-capture gate suppresses firing when coverage is out of
+    // range AND surfaces the guidance string to the user so they know
+    // how to recover.
+    //
+    // v1.8.6-rc4: lower bound relaxed from 0.35 → 0.20. Android uses
+    // 0.35 against an ML-Kit text-block bounding box that aggregates
+    // every text block on the document AND is padded by 10 % — that
+    // gives a larger reported bbox area than Apple Vision's
+    // `VNDetectDocumentSegmentationRequest`, which tightly segments
+    // the physical document edge. Same physical document framed the
+    // same way produces Android coverage ≈ 0.40 but iOS coverage
+    // ≈ 0.30. Capping iOS to 0.20 keeps the "tiny doc on big desk"
+    // 6 %-coverage reject (Stratum Remit screenshot 114) while
+    // letting through the merely-not-aggressive framings that real
+    // users do on iPhone 12 (Stratum Remit 2026-06-03 regression).
+    // Also see: cropToVideoAspect in CameraManager.swift and the
+    // 10 %-padding addition further down in this file.
+    private let minCoverage: CGFloat = 0.20
     private let maxCoverage: CGFloat = 0.85
 
-    /// Minimum confidence for document detection
-    var minimumConfidence: Float = 0.7
+    /// Minimum confidence for document detection.
+    ///
+    /// v1.8.6-rc4: lowered 0.7 → 0.5. Apple Vision's
+    /// `VNDetectDocumentSegmentationRequest` is conservative on
+    /// confidence scores — empirically the same physical document on
+    /// the same lighting that Android ML Kit reports as "detected"
+    /// can land in Vision's 0.5–0.7 range. Android's text-recognition
+    /// detector has no directly-comparable confidence metric; it
+    /// returns blocks or it doesn't. 0.5 is still meaningfully strict
+    /// (filters obvious noise) while not gating real detections on
+    /// the difference between two ML detector confidence scales.
+    var minimumConfidence: Float = 0.5
 
     /// Minimum aspect ratio for valid documents
     var minimumAspectRatio: Float = 0.5
@@ -90,19 +114,27 @@ final class DocumentScanner {
         let request = createDocumentDetectionRequest { [weak self] request, error in
             guard let self = self else { return }
 
+            // v1.8.6-rc4: diagnostic logging at every exit path. Gated by
+            // `KoraIDV.log` which itself respects Configuration.debugLogging
+            // — production builds with debug logging off pay zero cost.
+            // Per Stratum Remit's 2026-06-03 ask: a single 30-second hold
+            // tells us which gate is failing on a problem device.
+
             if let error = error {
-                KoraIDV.log("Document detection error: \(error)")
+                KoraIDV.log("DocumentScanner exit: vision-error — \(error.localizedDescription)")
                 self.handleNoDetection(completion: completion)
                 return
             }
 
             guard let observation = request.results?.first as? VNRectangleObservation else {
+                KoraIDV.log("DocumentScanner exit: no-observation — vision returned no rectangle")
                 self.handleNoDetection(completion: completion)
                 return
             }
 
             // Check confidence
             guard observation.confidence >= self.minimumConfidence else {
+                KoraIDV.log("DocumentScanner exit: low-confidence — \(observation.confidence) < \(self.minimumConfidence)")
                 self.handleNoDetection(completion: completion)
                 return
             }
@@ -110,6 +142,7 @@ final class DocumentScanner {
             // Check aspect ratio
             let aspectRatio = Float(observation.boundingBox.width / observation.boundingBox.height)
             guard aspectRatio >= self.minimumAspectRatio && aspectRatio <= self.maximumAspectRatio else {
+                KoraIDV.log("DocumentScanner exit: bad-aspect — \(aspectRatio) not in [\(self.minimumAspectRatio), \(self.maximumAspectRatio)]")
                 self.handleNoDetection(completion: completion)
                 return
             }
@@ -127,10 +160,22 @@ final class DocumentScanner {
                 observation.bottomLeft
             ]
 
-            // v1.8.6: compute coverage (document area / frame area) and
-            // emit guidance when the framing is unworkable. Caller
-            // suppresses auto-capture when guidance is non-nil.
-            let coverage = observation.boundingBox.width * observation.boundingBox.height
+            // v1.8.6-rc4: pad the bounding box by 10 % before computing
+            // coverage, matching Android's text-block-padding pattern in
+            // koraidv-android/.../DocumentScanner.kt. Apple Vision's tight
+            // segmentation bbox underestimates physical document size
+            // relative to the user's perception of "the document fills
+            // this much of the frame", so the unpadded coverage check
+            // suppressed auto-capture on perfectly-framed iPhone 12 holds
+            // (Stratum Remit 2026-06-03). Pad keeps iOS coverage math
+            // closer to Android's ML-Kit-aggregated-text-block bounds.
+            let bbox = observation.boundingBox
+            let padX = bbox.width * 0.10
+            let padY = bbox.height * 0.10
+            let paddedWidth = min(1.0, bbox.width + 2 * padX)
+            let paddedHeight = min(1.0, bbox.height + 2 * padY)
+            let coverage = paddedWidth * paddedHeight
+
             let qualityGuidance: String?
             if coverage < self.minCoverage {
                 qualityGuidance = "Move closer to the document"
@@ -147,6 +192,8 @@ final class DocumentScanner {
                 isStable: isStable,
                 qualityGuidance: qualityGuidance
             )
+
+            KoraIDV.log("DocumentScanner exit: success — confidence=\(observation.confidence) aspect=\(aspectRatio) coverage=\(String(format: "%.2f", Float(coverage))) isStable=\(isStable) guidance=\(qualityGuidance ?? "nil")")
 
             // Cache for transient-miss tolerance on subsequent frames.
             self.lastDetectionResult = result
@@ -374,14 +421,33 @@ final class DocumentScanner {
     /// misses, returns the last successful detection so the caller's
     /// detection burst stays alive across single-frame Vision dropouts.
     /// On the threshold-th miss, fully clears state and returns nil.
+    ///
+    /// v1.8.6-rc4: explicitly cold-start safe. If there's no cached
+    /// detection result yet (no successful detection has happened in
+    /// this session), we return `completion(nil)` immediately rather
+    /// than going through the counter-based fallback. The pre-rc4
+    /// code was functionally equivalent on cold start (cache was nil
+    /// so the "return cache" branch also returned nil) but the
+    /// explicit guard makes the cold-start path readable without
+    /// having to walk through the math.
     private func handleNoDetection(completion: @escaping (DocumentDetectionResult?) -> Void) {
+        // Cold start: no previous successful detection to fall back to.
+        // Behave identically to pre-counter logic.
+        guard lastDetectionResult != nil else {
+            KoraIDV.log("DocumentScanner handleNoDetection: cold-start, no cached result")
+            completion(nil)
+            return
+        }
+
         noDetectionCounter += 1
         if noDetectionCounter >= noDetectionThreshold {
+            KoraIDV.log("DocumentScanner handleNoDetection: \(noDetectionCounter) misses, clearing cache")
             lastObservation = nil
             stabilityCounter = 0
             lastDetectionResult = nil
             completion(nil)
         } else {
+            KoraIDV.log("DocumentScanner handleNoDetection: transient miss \(noDetectionCounter)/\(noDetectionThreshold), returning cached result")
             completion(lastDetectionResult)
         }
     }
