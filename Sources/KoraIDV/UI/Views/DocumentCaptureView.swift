@@ -91,9 +91,31 @@ struct DocumentCaptureView: View {
                         .padding(.bottom, 12)
                 }
 
-                // Guidance pill
+                // Guidance pill.
+                //
+                // v1.8.6-rc5: prefer `viewModel.feedbackMessage` when set so
+                // the framing-guidance strings the detector emits ("Move
+                // closer to the document" / "Move further from the
+                // document") actually surface to the user. Pre-rc5 the badge
+                // was binary between hold_steady / scanning L10n keys and
+                // never read feedbackMessage at all — the qualityGuidance
+                // work shipped in rc2/rc3/rc4 was running in the background
+                // but invisible to users, so they had no indication of how
+                // close or far to hold the document (Stratum Remit 2026-
+                // 06-03 report). Falls back to the L10n binary strings
+                // when feedbackMessage is unset (defensive — feedbackMessage
+                // is virtually always set post-rc4 but the fallback keeps
+                // the localized copy as the baseline).
+                //
+                // L10n debt: the framing-guidance strings emitted by
+                // DocumentScanner.swift are inline-Swift strings, not L10n
+                // keys, so they won't translate. Acceptable for a hotfix;
+                // proper key extraction is a follow-up.
                 GuidancePill(
-                    text: viewModel.isDocumentDetected ? L10n.tr("koraidv.capture.hold_steady") : L10n.tr("koraidv.capture.scanning"),
+                    text: viewModel.feedbackMessage
+                        ?? (viewModel.isDocumentDetected
+                            ? L10n.tr("koraidv.capture.hold_steady")
+                            : L10n.tr("koraidv.capture.scanning")),
                     variant: viewModel.isDocumentDetected ? .ready : .scanning
                 )
 
