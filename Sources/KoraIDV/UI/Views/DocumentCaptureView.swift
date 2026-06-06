@@ -489,9 +489,11 @@ extension DocumentCaptureViewModel: CameraManagerDelegate {
     func cameraManager(_ manager: CameraManager, didOutput sampleBuffer: CMSampleBuffer) {
         guard !isCapturing, !hasPendingReview else { return }
 
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-
-        documentScanner.detectDocument(in: pixelBuffer) { [weak self] result in
+        // v1.9.0: DocumentScanner now accepts CMSampleBuffer directly
+        // (uses Google ML Kit which takes VisionImage(buffer:)). Saves
+        // the CVPixelBuffer extraction round-trip we used to do for
+        // Apple Vision's VNDetectDocumentSegmentationRequest.
+        documentScanner.detectDocument(in: sampleBuffer) { [weak self] result in
             DispatchQueue.main.async {
                 guard let self = self else { return }
 

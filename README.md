@@ -12,10 +12,10 @@ Native iOS SDK for identity verification with document capture, selfie capture, 
 
 ### CocoaPods (Recommended)
 
-Add to your `Podfile`:
+KoraIDV is distributed via CocoaPods. Add to your `Podfile`:
 
 ```ruby
-pod 'KoraIDV', :git => 'https://github.com/badedokun/koraidv-koraidv-ios.git', :tag => '1.5.5'
+pod 'KoraIDV', :git => 'https://github.com/badedokun/koraidv-koraidv-ios.git', :tag => '1.9.0'
 ```
 
 Then run:
@@ -24,19 +24,9 @@ Then run:
 pod install
 ```
 
-> **Important:** Ensure your iOS deployment target is set to iOS 14.0 or higher in both your Podfile and Xcode project settings.
+> **Important:** Set your iOS deployment target to iOS 15.0 or higher in both your Podfile and Xcode project settings.
 
-### Swift Package Manager
-
-Add the following to your `Package.swift`:
-
-```swift
-dependencies: [
-    .package(url: "https://github.com/badedokun/koraidv-koraidv-ios.git", from: "1.5.5")
-]
-```
-
-Or in Xcode: File → Add Package Dependencies → Enter the repository URL.
+> **v1.9.0 — Swift Package Manager no longer supported.** Document detection now depends on Google ML Kit, which ships only via CocoaPods (no official Google SPM distribution). Existing SPM consumers should either pin to v1.8.5 or migrate to CocoaPods.
 
 ## Quick Start
 
