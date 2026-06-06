@@ -211,9 +211,38 @@ extension LivenessViewModel: LivenessManagerDelegate {
     }
 
     func livenessManager(_ manager: LivenessManager, didCompleteChallenge challenge: LivenessChallenge, passed: Bool, imageData: Data?) {
+        // **v1.9.0-rc3 — stop the silent empty-imageBase64 submission.**
+        // rc2 (and earlier) used `imageData ?? Data()` here, so when
+        // the SDK's capture path produced nil (anti-spoof reject,
+        // CMSampleBuffer extraction failure, CGImage create failure,
+        // or maxFramesPerChallenge exhaustion) the host received empty
+        // bytes, base64-encoded them, and POSTed an empty
+        // `imageBase64` to identity-service. The backend's
+        // `binding:"required"` rejected in 201µs with a generic 400
+        // — the exact symptom Stratum Remit reported on 2026-06-06
+        // ("errored out to 400 after about 15 or less seconds").
+        //
+        // Suppressing the host callback when imageData is nil/empty
+        // stops the bad submission at its source. The frame budget
+        // (`maxFramesPerChallenge = 300`) will continue to advance;
+        // the host's challenge UI is responsible for its own timeout
+        // and retry affordance. Better silent in-SDK timeout than
+        // visible-but-misleading "HTTP 400" toast.
+        //
+        // Once a proper retry-in-place path is added (v1.10+ ask:
+        // surface `.failure(.captureNotAvailable)` to the host so the
+        // UI can offer a specific retry message), this guard can
+        // become "convert to failure callback" instead of "suppress."
+        guard let imageData = imageData, !imageData.isEmpty else {
+            KoraIDV.log("LivenessView: challenge=\(challenge.type) completed with nil/empty imageData — suppressing host callback to avoid empty imageBase64 submission")
+            DispatchQueue.main.async {
+                self.completedChallenges += 1
+            }
+            return
+        }
         DispatchQueue.main.async {
             self.completedChallenges += 1
-            self.onChallengeComplete?(challenge, imageData ?? Data())
+            self.onChallengeComplete?(challenge, imageData)
         }
     }
 

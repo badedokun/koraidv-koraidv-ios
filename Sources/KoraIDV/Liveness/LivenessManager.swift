@@ -194,6 +194,12 @@ final class LivenessManager: NSObject {
 
         // Enforce per-challenge frame budget
         guard frameCount < maxFramesPerChallenge else {
+            // rc3 diagnostic: frame budget is the most common nil-path
+            // — at 30fps a 300-frame budget exhausts in ~10s, which
+            // matches the "400 after about 15 or less seconds" symptom
+            // Stratum reported when the face confidence threshold
+            // never let challenge detection fire.
+            KoraIDV.log("LivenessManager: frame budget exhausted (\(maxFramesPerChallenge)) for challenge=\(challenge.type); recording nil imageData")
             recordChallengeResult(challenge: challenge, passed: false, confidence: 0, imageData: nil)
             return
         }
@@ -227,8 +233,14 @@ final class LivenessManager: NSObject {
     }
 
     private func captureFrameForChallenge(_ challenge: LivenessChallenge, face: DetectedFace, sampleBuffer: CMSampleBuffer) {
-        // Convert sample buffer to image data
+        // rc3: each nil-imageData exit path is now logged so QA can see
+        // *which* failure mode is firing in a given session. Previously
+        // all four paths (here × 3 + frame budget) folded into the same
+        // silent HTTP 400; now Console.app filter `subsystem:com.koraidv.sdk`
+        // pinpoints whether it's a capture-side, conversion-side, or
+        // anti-spoof rejection.
         guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+            KoraIDV.log("LivenessManager: CMSampleBufferGetImageBuffer returned nil for challenge=\(challenge.type)")
             recordChallengeResult(challenge: challenge, passed: false, confidence: 0, imageData: nil)
             return
         }
@@ -236,6 +248,7 @@ final class LivenessManager: NSObject {
         let ciImage = CIImage(cvPixelBuffer: imageBuffer)
 
         guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else {
+            KoraIDV.log("LivenessManager: createCGImage failed for challenge=\(challenge.type)")
             recordChallengeResult(challenge: challenge, passed: false, confidence: 0, imageData: nil)
             return
         }
@@ -245,6 +258,7 @@ final class LivenessManager: NSObject {
         // Run anti-spoof check on captured frame
         let spoofResult = antiSpoofCheck.analyze(image)
         if !spoofResult.isLikelyReal {
+            KoraIDV.log("LivenessManager: anti-spoof rejected frame for challenge=\(challenge.type) (isLikelyReal=false)")
             recordChallengeResult(challenge: challenge, passed: false, confidence: 0, imageData: nil)
             return
         }

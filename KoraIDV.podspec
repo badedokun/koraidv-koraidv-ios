@@ -16,6 +16,15 @@ Pod::Spec.new do |s|
     double-rotating the already-portrait CameraManager buffer and collapsing
     text-bbox coverage below the 0.35 threshold. Plus os_log migration so
     TestFlight builds can be diagnosed without a debug attach.
+
+    v1.9.0-rc3: addresses Stratum Remit 2026-06-06 device-test report —
+    coverage threshold FOV-recalibrated for iPhone wide-angle (0.35 → 0.18),
+    selfie face-size floor lowered (0.15 → 0.10), document "snaps twice"
+    race fixed, liveness empty-imageBase64 submission suppressed (was
+    causing silent HTTP 400 on every nil-capture path). Also ship-blockers
+    from rc2: autoclosure compile error in KoraIDV.log resolved, Logger
+    level promoted from .debug to .info so TestFlight QA sees output.
+    KoraIDV.version constant bumped (rc2 still reported 1.8.3 to backend).
   DESC
 
   s.homepage         = 'https://github.com/badedokun/koraidv-koraidv-ios'
@@ -23,7 +32,14 @@ Pod::Spec.new do |s|
   s.author           = { 'Korastratum' => 'support@korastratum.com' }
   s.source           = { :git => 'https://github.com/badedokun/koraidv-koraidv-ios.git', :tag => "v#{s.version}" }
 
-  s.ios.deployment_target = '15.0'
+  # v1.9.0-rc3: bumped 15.0 → 15.5 because GoogleMLKit 7.x requires
+  # ios 15.5 as its minimum deployment target. Real-world impact: zero;
+  # every iPhone capable of running iOS 15.0 also runs 15.5 (it's the
+  # same 6s/SE-1st-gen-and-up fleet). Surfaced by `pod lib lint` (full
+  # consumer build) during rc3 prep — `pod spec lint --quick` had been
+  # green all along because it only validates metadata, not real
+  # dependency resolution.
+  s.ios.deployment_target = '15.5'
   s.swift_version = '5.7'
 
   s.source_files = 'Sources/KoraIDV/**/*.swift'

@@ -169,9 +169,14 @@ public final class KoraIDV {
 
     // MARK: - Utilities
 
-    /// SDK version
+    /// SDK version. Surfaced to the backend as the `User-Agent` suffix
+    /// (`KoraIDV-iOS/<version>`) — keep in sync with `KoraIDV.podspec`
+    /// every release. A stale value here showed up in Stratum Remit's
+    /// v1.9.0-rc2 diagnostic as `User-Agent: KoraIDV-iOS/1.8.3` against
+    /// an rc2 build, making it impossible to correlate backend logs
+    /// with the actual SDK version that produced them.
     public static var version: String {
-        "1.8.3"
+        "1.9.0-rc3"
     }
 
     /// Reset the SDK configuration
@@ -188,19 +193,43 @@ public final class KoraIDV {
         shared.state?.configuration.debugLogging ?? false
     }
 
-    /// Unified Apple logging channel for the SDK. Routes through `os_log` so
-    /// release builds (TestFlight, App Store) emit to the unified logging
-    /// system and show up in Console.app without a debug attach. Previously
-    /// used `print()`, which only reaches Xcode's debug console — invisible
-    /// to QA running TestFlight builds on dedicated test devices.
+    /// Unified Apple logging channel for the SDK. Routes through `os.Logger`
+    /// so release builds (TestFlight, App Store) emit to the unified logging
+    /// system and show up in Console.app without a debug attach.
     private static let logger = Logger(subsystem: "com.koraidv.sdk", category: "KoraIDV")
 
     /// Log a debug message. Only emits when debugLogging is enabled.
     /// Format kept identical (`[KoraIDV] <message>`) so existing log-grep
     /// tooling and the test team's filters keep working.
+    ///
+    /// **v1.9.0-rc3 fixes from Stratum Remit diagnostic 2026-06-06:**
+    ///
+    /// 1. Resolve the autoclosure to a local `String` before passing it
+    ///    into `Logger`'s `OSLogMessage` interpolation. `Logger.<level>`
+    ///    captures the interpolated expression into an escaping
+    ///    autoclosure on the message-builder, and Swift correctly
+    ///    rejects passing a non-escaping `@autoclosure` parameter
+    ///    directly into that escaping context. rc2 shipped with this
+    ///    compile error — Stratum had to local-patch their Pods install
+    ///    to even build. Resolving to a local first sidesteps the
+    ///    escape mismatch while keeping the lazy-evaluation behavior
+    ///    of the autoclosure (still only invoked when debugLogging
+    ///    is true).
+    ///
+    /// 2. Use `Logger.info`, not `Logger.debug`. On Apple platforms
+    ///    `Logger.debug` writes only to an in-memory ring buffer and
+    ///    is invisible to Console.app and `idevicesyslog` by default
+    ///    — surfacing it requires either a debug attach or
+    ///    `sudo log config --mode "level:debug" --subsystem ...`,
+    ///    neither of which is feasible for QA on TestFlight devices.
+    ///    rc2 instrumentation was completely silent until Stratum
+    ///    promoted the call site to `.info` locally. Stay at `.info`
+    ///    so SDK consumers' QA teams can read our logs without
+    ///    privileged system reconfiguration.
     internal static func log(_ message: @autoclosure () -> String) {
         if debugLogging {
-            logger.debug("[KoraIDV] \(message(), privacy: .public)")
+            let resolved = message()
+            logger.info("[KoraIDV] \(resolved, privacy: .public)")
         }
     }
 }

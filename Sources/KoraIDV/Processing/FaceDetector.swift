@@ -217,7 +217,20 @@ extension FaceDetector {
         let faceArea = face.boundingBox.width * face.boundingBox.height
         let faceSizeRatio = faceArea / imageArea
 
-        if faceSizeRatio < 0.15 {
+        // **v1.9.0-rc3 calibration note.** Lowered from 0.15 → 0.10 to
+        // match Android `QualityValidator.minFaceSizePercentage = 0.10`.
+        // Same FOV-calibration root cause as the document coverage
+        // threshold (see `DocumentScanner.swift`): iPhone front-camera
+        // wide-angle has narrower FOV than typical Android selfie
+        // cameras, so a face inside the standard selfie oval guide
+        // produces a face-area-to-frame-area ratio in the 0.10–0.14
+        // range on iPhone — never reaching the prior 0.15 floor.
+        // Stratum Remit 2026-06-06: "the selfie is the same. you have
+        // to move the phone very close to the face outside the oval
+        // circle before it is detected and captured." Same fix unblocks
+        // the liveness grey-oval-never-green issue, since the oval-color
+        // UI gates on this same validation result.
+        if faceSizeRatio < 0.10 {
             issues.append("Face is too small. Move closer.")
         } else if faceSizeRatio > 0.6 {
             issues.append("Face is too large. Move back.")

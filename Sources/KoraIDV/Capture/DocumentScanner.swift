@@ -92,11 +92,40 @@ final class DocumentScanner {
     /// in v1.8.x) never converge.
     private let stabilityTolerance: CGFloat = 0.10
 
-    /// Coverage thresholds: text-bbox area / frame area. Below 0.35
-    /// the document is too small for usable OCR; above 0.85 it's
-    /// clipped at frame edges. Matches Android — and now produces
-    /// the same numbers because we're using the same detector.
-    private let minCoverage: CGFloat = 0.35
+    /// Coverage thresholds: text-bbox area / frame area.
+    ///
+    /// **v1.9.0-rc3 calibration note.** Android uses `minCoverage = 0.35`.
+    /// iOS uses `0.18`. This is the one threshold that *intentionally*
+    /// diverges from Android — and it's the right divergence, because
+    /// the threshold is hardware-coupled to camera field-of-view.
+    /// iPhone 13 Pro's main wide-angle has a narrower FOV than typical
+    /// Android flagships, so the same physical document fills
+    /// proportionally less of the iOS viewfinder. Stratum Remit's
+    /// rc2 device test (2026-06-06, 985 captured frames at normal
+    /// hand-distance framing) measured text-coverage clustered at
+    /// 0.20–0.25 with maxima around 0.30 — never reaching the 0.35
+    /// Android threshold. The auto-capture deadline never elapsed,
+    /// "Move closer" guidance persisted indefinitely.
+    ///
+    /// Twin behavior between iOS and Android is preserved at the
+    /// *output* layer (auto-capture fires at appropriate framing on
+    /// both platforms) by tuning *input* calibration for hardware
+    /// difference — same pattern as differing ISO/exposure settings
+    /// producing equivalent images on different sensors. The text-block
+    /// methodology is identical to Android's `DocumentScanner.kt`; only
+    /// this FOV-calibration constant is iOS-specific.
+    ///
+    /// The risk QA flagged — lower threshold lets through smaller
+    /// documents that produce worse OCR — is mitigated by the backend's
+    /// document-quality scoring (completeness / resolution / sharpness
+    /// per `quality_engine`). The SDK's job is "is there a document";
+    /// the backend's job is "is what was captured usable." Don't
+    /// re-add SDK-side quality gating just because the threshold
+    /// dropped — let the backend reject and trigger retake.
+    ///
+    /// Upper bound (0.85) stays at Android parity — "clipped at frame
+    /// edges" is a geometric concept, not FOV-dependent.
+    private let minCoverage: CGFloat = 0.18
     private let maxCoverage: CGFloat = 0.85
 
     // MARK: - Recognizer

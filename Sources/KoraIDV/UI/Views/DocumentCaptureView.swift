@@ -455,11 +455,25 @@ class DocumentCaptureViewModel: ObservableObject {
 
 extension DocumentCaptureViewModel: CameraManagerDelegate {
     func cameraManager(_ manager: CameraManager, didCapturePhoto imageData: Data) {
-        isCapturing = false
-
+        // **v1.9.0-rc3 — fix "camera snaps twice" race.** rc2 reset
+        // `isCapturing = false` synchronously here, then dispatched
+        // validation to main. The detector callback also runs on main
+        // and arrives at ~30fps; in the window between this synchronous
+        // reset and the main-queue dispatch executing `hasPendingReview
+        // = true`, the next frame would see *both gates open* and call
+        // `captureManually` a second time — producing the double-shutter
+        // and the doubly-clipped review screen Stratum reported on
+        // 2026-06-06. Moving the `isCapturing` reset into the same main
+        // async block as `hasPendingReview` closes the race: while the
+        // main dispatch is queued, `isCapturing` stays true; when it
+        // runs, whichever gate is appropriate (review for success,
+        // deadline reset for failure) is set BEFORE `isCapturing`
+        // drops. Single shutter, every time.
         guard let image = UIImage(data: imageData) else {
             DispatchQueue.main.async {
                 self.isProcessing = false
+                self.isCapturing = false
+                self.firstDetectedTime = nil
                 self.feedbackMessage = "Invalid image. Try again."
             }
             return
@@ -479,8 +493,19 @@ extension DocumentCaptureViewModel: CameraManagerDelegate {
                 // silently replaces the displayed review image. The gate
                 // is released on retake via clearPendingReview().
                 self.hasPendingReview = true
+                self.isCapturing = false
                 self.onCapture?(imageData)
             } else {
+                // Quality reject path — release the capture gate AND
+                // reset the force-capture deadline. Without the deadline
+                // reset, the very next acceptable detection would see
+                // `elapsed >= forceCaptureDeadline` (because the timer
+                // started 3+ seconds ago, before this failed capture)
+                // and re-fire immediately with the same framing. Reset
+                // forces the user to hold steady for a fresh 3-second
+                // window before another shutter triggers.
+                self.firstDetectedTime = nil
+                self.isCapturing = false
                 self.feedbackMessage = validation.issues.first?.message ?? "Quality check failed"
             }
         }

@@ -24,7 +24,7 @@ Then run:
 pod install
 ```
 
-> **Important:** Set your iOS deployment target to iOS 15.0 or higher in both your Podfile and Xcode project settings.
+> **Important:** Set your iOS deployment target to **iOS 15.5** or higher in both your Podfile and Xcode project settings. (15.5 is the minimum required by Google ML Kit 7.x; every iPhone capable of running iOS 15.0 also runs 15.5.)
 
 > **v1.9.0 — Swift Package Manager no longer supported.** Document detection now depends on Google ML Kit, which ships only via CocoaPods (no official Google SPM distribution). Existing SPM consumers should either pin to v1.8.5 or migrate to CocoaPods.
 
