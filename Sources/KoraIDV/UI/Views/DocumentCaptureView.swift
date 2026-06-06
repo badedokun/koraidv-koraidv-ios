@@ -373,17 +373,22 @@ class DocumentCaptureViewModel: ObservableObject {
     @Published var isProcessing = false
     @Published var isFlashOn = false
 
-    let cameraManager: CameraManager = {
-        let m = CameraManager()
-        // v1.9.0-rc5: tell CameraManager to apply the ID-1 centered
-        // crop (1.586:1 horizontal card) on top of orientation
-        // normalization and aspect crop. Without this the captured
-        // photo includes the full portrait viewfinder area and the
-        // DL appears as a small card in a sea of background; with
-        // it the photo is card-shaped and fills the review viewport.
-        m.documentMode = true
-        return m
-    }()
+    // **v1.9.0-rc5.1 — revert rc5 cropToDocument activation.** rc5 set
+    // `m.documentMode = true` here so CameraManager would apply a
+    // centered ID-1 aspect (1.586:1) crop on captured photos. Stratum
+    // Remit's 2026-06-06 rc5 device test confirmed that the centered
+    // crop reduced the DL's face photo region (which sits in the upper
+    // half of the card) to ~100×140 pixels in the 1026×647 cropped
+    // output — below the server-side face-matching ML's minimum-face
+    // threshold. Server scored `faceMatch=0` and `nameMatch=0`,
+    // dropping overall from rc4's 76.6 to 49 (auto-reject). The fix is
+    // bbox-based cropping using DocumentScanner.lastBboxFractional —
+    // tracked for v1.9.0-rc6. Until then, leave `documentMode` at its
+    // default `false` so DL captures stay at their rc4 dimensions
+    // (1080×1920 portrait, full frame) — DL appears small in the
+    // review viewport but face/name regions are large enough for the
+    // backend ML to score correctly.
+    let cameraManager = CameraManager()
     private let documentScanner = DocumentScanner()
     private let qualityValidator = QualityValidator()
 

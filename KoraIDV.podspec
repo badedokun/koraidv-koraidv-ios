@@ -47,6 +47,15 @@ Pod::Spec.new do |s|
     0-100 source) for liveness/face/doc metrics consistently.
     Liveness challenge orchestration deferred to rc6 (separate UX-decision
     scope — fail-session vs retry vs continue).
+
+    v1.9.0-rc5.1: hotfix revert of rc5 cropToDocument activation. rc5
+    centered-crop reduced the DL face region to ~100×140px, below the
+    backend face-matching ML threshold — faceMatch and nameMatch both
+    scored 0, overall dropped from rc4's 76.6 to 49 (auto-reject).
+    DocumentCaptureView no longer sets documentMode=true; falls back to
+    rc4 behavior (full 1080×1920 portrait DL capture). Selfie Match
+    display fix from rc5 stays. Proper bbox-based document cropping
+    deferred to rc6.
   DESC
 
   s.homepage         = 'https://github.com/badedokun/koraidv-koraidv-ios'
