@@ -81,6 +81,22 @@ Pod::Spec.new do |s|
     custom LivenessManagerDelegate conformers.
 
     Document bbox-based crop deferred to rc6.1.
+
+    v1.9.0-rc6.1: two fixes from Stratum Remit 2026-06-06 rc6 device
+    test. (1) Liveness "stuck on challenge 2": rc6's LivenessView reset
+    isFaceDetected=false in didStartChallenge, but the manager's
+    didChangeFaceDetected only fires on state transitions — face was
+    continuously detected across challenges, so no transition, so no
+    callback, so countdown never restarted. Fix: don't reset; trigger
+    countdown immediately if face is already detected when challenge
+    starts. (2) Permanent fix for "DL too small in review screen":
+    DocumentScanner now exposes lastBoundsFractional (normalized 0–1
+    bbox); DocumentCaptureView snapshots it at capture trigger and
+    hands to CameraManager via documentBbox property; CameraManager's
+    cropToDocument uses the bbox + 5% padding instead of the centered
+    geometric heuristic that rc5 shipped (which clipped face/name).
+    documentMode re-enabled for DocumentCaptureView. Mirrors Android's
+    getLastBoundsFractional pattern.
   DESC
 
   s.homepage         = 'https://github.com/badedokun/koraidv-koraidv-ios'

@@ -224,14 +224,33 @@ extension LivenessViewModel: LivenessManagerDelegate {
             self.challengeProgress = 0
             // **v1.9.0-rc6** — show 3 in the UI but DON'T tick down
             // yet. The countdown waits for the user's face to be in
-            // confident range (`didChangeFaceDetected(true)`) before
-            // it starts. Before rc6 the countdown fired immediately
-            // on challenge start regardless of face state, so it
-            // raced down 3→2→1→0 to an empty viewport while the user
-            // was still re-acquiring the camera.
+            // confident range before it starts. Before rc6 the
+            // countdown fired immediately on challenge start regardless
+            // of face state, so it raced down 3→2→1→0 to an empty
+            // viewport while the user was still re-acquiring the
+            // camera.
             self.countdown = 3
             self.countdownStartedForCurrentChallenge = false
-            self.isFaceDetected = false  // reset; will refresh from next detection
+
+            // **v1.9.0-rc6.1 — fix "stuck on challenge 2".** rc6 reset
+            // `self.isFaceDetected = false` here, which masked the
+            // current face state. The LivenessManager's
+            // `didChangeFaceDetected` callback only fires on state
+            // *transitions*, so if the face was already detected from
+            // the previous challenge (almost always the case — user
+            // doesn't drop out of frame between challenges), the
+            // manager has no transition to report. The view sat
+            // waiting for a face-detected callback that would never
+            // come; countdown never started; user stuck. Don't reset
+            // — the view's `isFaceDetected` reflects current camera
+            // state and shouldn't lie about it just because the
+            // challenge prompt changed. If face IS already detected,
+            // start the countdown immediately (the same code path
+            // that `didChangeFaceDetected` would have taken).
+            if self.isFaceDetected && self.countdown > 0 {
+                self.countdownStartedForCurrentChallenge = true
+                self.startCountdown()
+            }
         }
     }
 

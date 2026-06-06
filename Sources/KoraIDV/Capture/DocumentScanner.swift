@@ -297,6 +297,9 @@ final class DocumentScanner {
                 KoraIDV.log("DocumentScanner exit: success — blocks=\(blockCount) confidence=\(confidence) coverage=\(String(format: "%.2f", Float(coverage))) isStable=\(isStable) guidance=\(qualityGuidance ?? "nil")")
 
                 self.lastDetectionResult = detection
+                // rc6.1: snapshot the analysis image dimensions so
+                // `lastBoundsFractional()` can normalize the bbox.
+                self.lastAnalysisImageSize = CGSize(width: width, height: height)
                 completion(detection)
             } else {
                 // No text blocks detected in this frame. Increment miss
@@ -358,5 +361,52 @@ final class DocumentScanner {
         stabilityCounter = 0
         noDetectionCounter = 0
         lastDetectionResult = nil
+        lastAnalysisImageSize = .zero
+    }
+
+    /// **v1.9.0-rc6.1** — analysis image dimensions captured alongside the
+    /// most recent `lastDetectionResult`. Stored so `lastBoundsFractional`
+    /// can express the detected bbox in 0–1 normalized coordinates,
+    /// allowing the photo-capture path (different pixel dimensions if
+    /// the photo output ever differs from the video output, though
+    /// currently both are 1080×1920 post-`normalizeToPortrait`) to map
+    /// the bbox onto the captured photo by scaling with the photo
+    /// dimensions.
+    ///
+    /// Mirrors Android's `lastImageWidth` / `lastImageHeight` at
+    /// `koraidv-android/.../DocumentScanner.kt:30`.
+    private var lastAnalysisImageSize: CGSize = .zero
+
+    /// **v1.9.0-rc6.1** — most recent detection bounding box in
+    /// 0–1 normalized coordinates relative to the analysis image, or
+    /// nil if no detection yet. Caller (CameraManager photo-capture
+    /// path) scales by the captured photo's dimensions to get a tight
+    /// crop region around the document.
+    ///
+    /// This is the permanent fix for the "DL too small in review
+    /// screen" issue. Previous attempts:
+    /// - rc4 and earlier: no crop, photo arrived sensor-native landscape
+    ///   with DL sideways
+    /// - rc5: centered ID-1 aspect crop, clipped face/name because
+    ///   the geometric center was below where the user placed the DL
+    /// - rc5.1: reverted rc5; DL whole but small
+    /// - rc6.1: bbox-based crop using THE ACTUAL DETECTED DOCUMENT
+    ///   LOCATION — what should have been done from the start
+    ///
+    /// Mirrors Android's `getLastBoundsFractional()` at
+    /// `koraidv-android/.../DocumentScanner.kt:237`.
+    func lastBoundsFractional() -> CGRect? {
+        let size = lastAnalysisImageSize
+        guard size.width > 0, size.height > 0,
+              let box = lastDetectionResult?.boundingBox
+        else {
+            return nil
+        }
+        return CGRect(
+            x: max(0, min(1, box.minX / size.width)),
+            y: max(0, min(1, box.minY / size.height)),
+            width: max(0, min(1, box.width / size.width)),
+            height: max(0, min(1, box.height / size.height))
+        )
     }
 }

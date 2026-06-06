@@ -37,16 +37,26 @@ final class CameraManager: NSObject {
     private var currentDevice: AVCaptureDevice?
     private var currentPosition: CameraPosition = .back
 
-    /// When true, captured photos are additionally cropped to a centered
-    /// ID-1 aspect (1.586:1) horizontal card after orientation normalization.
-    /// Set by `DocumentCaptureView` before triggering capture so the review
-    /// screen sees the document filling the frame rather than a tiny card
-    /// inside a 1080×1920 portrait expanse of background. Selfie/liveness
-    /// flows leave this `false` so the full portrait selfie isn't cropped
-    /// down to a horizontal slice. Mirrors Android's
-    /// `DocumentScanner.cropToDocument` which serves the same purpose on
-    /// `Bitmap` outputs from CameraX. v1.9.0-rc5.
+    /// When true, captured photos are additionally cropped to the
+    /// detected document bounding box after orientation normalization.
+    /// Set by `DocumentCaptureView` before triggering capture; selfie/
+    /// liveness flows leave this `false` so the full portrait selfie
+    /// isn't cropped down to a card region. v1.9.0-rc5 (centered
+    /// fallback) / v1.9.0-rc6.1 (bbox-based when `documentBbox` is
+    /// also set).
     var documentMode: Bool = false
+
+    /// **v1.9.0-rc6.1** — bounding box of the detected document in
+    /// 0–1 normalized coordinates, snapshotted by DocumentCaptureView
+    /// at capture trigger time from `DocumentScanner.lastBoundsFractional()`.
+    /// When non-nil AND `documentMode` is true, the captured photo is
+    /// cropped to this region (plus padding) instead of falling back to
+    /// the centered-geometric heuristic that rc5 used (which clipped
+    /// the DL face region and broke face/name matching).
+    ///
+    /// Cleared by the caller after consuming, or left set across
+    /// retakes if the next detection has produced a new bbox.
+    var documentBbox: CGRect?
 
     private let sessionQueue = DispatchQueue(label: "com.koraidv.camera.session")
     private let videoOutputQueue = DispatchQueue(label: "com.koraidv.camera.video")
@@ -461,64 +471,90 @@ extension CameraManager: AVCapturePhotoCaptureDelegate {
         return cropped.jpegData(compressionQuality: 0.9)
     }
 
-    /// Crop a captured photo to a centered ID-1 aspect (1.586:1)
-    /// horizontal card region, sized to ~95% of the shorter dimension.
+    /// Crop a captured photo to the detected document region.
     ///
-    /// Mirrors Android's `DocumentScanner.cropToDocument` strategy:
-    /// the viewfinder already funnels the user toward a centered,
-    /// horizontally-oriented ID-1 document, so a centered aspect crop
-    /// at the standard ID card ratio reliably frames the card without
-    /// needing to plumb the live-detection bbox through to the photo
-    /// capture path. Android chose this over a tight-to-bbox crop
-    /// because their analysis stream and capture stream can arrive in
-    /// different orientations on CameraX — iOS doesn't have that exact
-    /// hazard after `normalizeToPortrait` runs, but the centered
-    /// approach is simpler, more robust to detection noise, and
-    /// matches Android's behavior for cross-platform parity.
+    /// **v1.9.0-rc6.1** — bbox-based implementation. When `documentBbox`
+    /// is set (normalized 0–1 coordinates from
+    /// `DocumentScanner.lastBoundsFractional()`), scales to absolute
+    /// pixel coords on the input photo, adds a 5% padding around each
+    /// edge, and crops. This is the permanent fix for the chronic
+    /// "DL too small in review screen" issue:
     ///
-    /// Returns nil if the JPEG can't be decoded; caller falls back to
-    /// the input data.
+    /// - rc4 (no crop): DL was small in the 1080×1920 portrait frame
+    /// - rc5 (centered ID-1 crop): clipped the DL because users place
+    ///   documents where the viewfinder guides them (upper portion of
+    ///   the screen), not at the geometric center of the photo
+    /// - rc5.1 (revert): back to rc4's "small but whole"
+    /// - rc6.1 (bbox-based): use the DETECTOR's known document location
+    ///   — what should have been done in rc5
     ///
-    /// v1.9.0-rc5.
+    /// Padding is asymmetric — 5% per side gives the photo room
+    /// around the card so backend ML services that re-detect the
+    /// document (face quality scoring, PDF417 decode) have margin
+    /// to work with rather than a perfectly-tight crop that might
+    /// touch the card edges and cause edge artifacts.
+    ///
+    /// Falls back to a centered ID-1 crop (the rc5 behavior) when
+    /// `documentBbox` is nil — only happens if the SDK captured a
+    /// frame before any detection succeeded, which shouldn't occur
+    /// in normal flow but is defensive.
+    ///
+    /// Returns nil if the JPEG can't be decoded; caller falls back
+    /// to the input data.
     private func cropToDocument(_ data: Data) -> Data? {
         guard let originalImage = UIImage(data: data) else { return nil }
 
         let imageSize = originalImage.size
         guard imageSize.width > 0, imageSize.height > 0 else { return nil }
 
-        // Standard ID-1 ratio (driver's licenses, national ID cards,
-        // passport biopage, credit cards). 85.60mm × 53.98mm = 1.586.
-        let targetAspect: CGFloat = 1.586
-
-        // Size the crop to ~95% of the dominant dimension. For a
-        // portrait-oriented input (the post-normalizeToPortrait case):
-        // width is the shorter edge → targetWidth = width * 0.95,
-        // targetHeight = targetWidth / aspect. For a landscape input
-        // (unlikely after normalizeToPortrait, kept for robustness):
-        // height is the shorter edge → targetHeight = height * 0.95,
-        // targetWidth = targetHeight * aspect.
-        let isPortrait = imageSize.height >= imageSize.width
-        let cropSize: CGSize
-        if isPortrait {
-            let targetW = imageSize.width * 0.95
-            let targetH = min(targetW / targetAspect, imageSize.height)
-            cropSize = CGSize(width: targetW, height: targetH)
+        let cropRect: CGRect
+        if let bbox = documentBbox {
+            // **rc6.1 bbox path.** Scale the 0–1 normalized bbox to
+            // absolute pixel coordinates on the captured photo, then
+            // add a 5% padding around each edge.
+            let pad: CGFloat = 0.05
+            let xPad = bbox.width * pad
+            let yPad = bbox.height * pad
+            let padded = CGRect(
+                x: max(0, bbox.minX - xPad),
+                y: max(0, bbox.minY - yPad),
+                width: min(1 - max(0, bbox.minX - xPad), bbox.width + 2 * xPad),
+                height: min(1 - max(0, bbox.minY - yPad), bbox.height + 2 * yPad)
+            )
+            cropRect = CGRect(
+                x: padded.minX * imageSize.width,
+                y: padded.minY * imageSize.height,
+                width: padded.width * imageSize.width,
+                height: padded.height * imageSize.height
+            )
         } else {
-            let targetH = imageSize.height * 0.95
-            let targetW = min(targetH * targetAspect, imageSize.width)
-            cropSize = CGSize(width: targetW, height: targetH)
+            // Fallback: centered ID-1 aspect crop (rc5 behavior).
+            // Only used when no detection bbox is available.
+            let targetAspect: CGFloat = 1.586
+            let isPortrait = imageSize.height >= imageSize.width
+            let cropSize: CGSize
+            if isPortrait {
+                let targetW = imageSize.width * 0.95
+                let targetH = min(targetW / targetAspect, imageSize.height)
+                cropSize = CGSize(width: targetW, height: targetH)
+            } else {
+                let targetH = imageSize.height * 0.95
+                let targetW = min(targetH * targetAspect, imageSize.width)
+                cropSize = CGSize(width: targetW, height: targetH)
+            }
+            cropRect = CGRect(
+                x: (imageSize.width - cropSize.width) / 2,
+                y: (imageSize.height - cropSize.height) / 2,
+                width: cropSize.width,
+                height: cropSize.height
+            )
         }
-
-        let cropOrigin = CGPoint(
-            x: (imageSize.width - cropSize.width) / 2,
-            y: (imageSize.height - cropSize.height) / 2
-        )
 
         let format = UIGraphicsImageRendererFormat.default()
         format.scale = originalImage.scale
-        let renderer = UIGraphicsImageRenderer(size: cropSize, format: format)
+        let renderer = UIGraphicsImageRenderer(size: cropRect.size, format: format)
         let cropped = renderer.image { _ in
-            originalImage.draw(at: CGPoint(x: -cropOrigin.x, y: -cropOrigin.y))
+            originalImage.draw(at: CGPoint(x: -cropRect.minX, y: -cropRect.minY))
         }
 
         return cropped.jpegData(compressionQuality: 0.92)

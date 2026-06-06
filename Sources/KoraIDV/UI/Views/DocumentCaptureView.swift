@@ -373,22 +373,21 @@ class DocumentCaptureViewModel: ObservableObject {
     @Published var isProcessing = false
     @Published var isFlashOn = false
 
-    // **v1.9.0-rc5.1 — revert rc5 cropToDocument activation.** rc5 set
-    // `m.documentMode = true` here so CameraManager would apply a
-    // centered ID-1 aspect (1.586:1) crop on captured photos. Stratum
-    // Remit's 2026-06-06 rc5 device test confirmed that the centered
-    // crop reduced the DL's face photo region (which sits in the upper
-    // half of the card) to ~100×140 pixels in the 1026×647 cropped
-    // output — below the server-side face-matching ML's minimum-face
-    // threshold. Server scored `faceMatch=0` and `nameMatch=0`,
-    // dropping overall from rc4's 76.6 to 49 (auto-reject). The fix is
-    // bbox-based cropping using DocumentScanner.lastBboxFractional —
-    // tracked for v1.9.0-rc6. Until then, leave `documentMode` at its
-    // default `false` so DL captures stay at their rc4 dimensions
-    // (1080×1920 portrait, full frame) — DL appears small in the
-    // review viewport but face/name regions are large enough for the
-    // backend ML to score correctly.
-    let cameraManager = CameraManager()
+    // **v1.9.0-rc6.1 — re-enable document crop, bbox-based this time.**
+    // rc5's centered-geometric crop clipped face/name regions; rc5.1
+    // reverted to no crop (DL small in portrait frame); rc6.1 finally
+    // does it right: snapshot the detected document bbox at capture
+    // trigger time and pass it to CameraManager so the crop uses the
+    // ACTUAL detected document location (with 5% padding). This is the
+    // permanent fix for the chronic "DL too small in review screen"
+    // issue. The bbox is set on `cameraManager.documentBbox` inside
+    // `captureManually()` below — see that method for the trigger-time
+    // snapshot.
+    let cameraManager: CameraManager = {
+        let m = CameraManager()
+        m.documentMode = true
+        return m
+    }()
     private let documentScanner = DocumentScanner()
     private let qualityValidator = QualityValidator()
 
@@ -464,6 +463,17 @@ class DocumentCaptureViewModel: ObservableObject {
         guard !isCapturing, !hasPendingReview else { return }
         isCapturing = true
         isProcessing = true
+
+        // **v1.9.0-rc6.1** — snapshot the detector's last known
+        // bounding box (normalized 0–1) and hand it to CameraManager
+        // for use during the photo-capture crop. Without this, the
+        // CameraManager falls back to the centered ID-1 heuristic
+        // that rc5 shipped and that clipped face/name regions when
+        // the user placed the DL where the viewfinder guides them
+        // (upper portion of the screen) rather than at the geometric
+        // center of the photo. With this, the crop tightly matches
+        // the document the SDK was already detecting on every frame.
+        cameraManager.documentBbox = documentScanner.lastBoundsFractional()
         cameraManager.capturePhoto()
     }
 }
