@@ -629,7 +629,10 @@ final class VerificationFlowController {
             return .selfie
         case .livenessRequired:
             return .liveness
-        case .processing, .approved, .rejected, .reviewRequired:
+        // rc6.2: `verified` is the backend's wire string for auto-approve;
+        // `approved` is the legacy alias retained for backwards compat.
+        // Both map to the same terminal `result` step here.
+        case .processing, .verified, .approved, .rejected, .reviewRequired:
             return .result
         case .expired:
             return .result

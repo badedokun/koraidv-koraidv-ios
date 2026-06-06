@@ -425,19 +425,45 @@ class DocumentCaptureViewModel: ObservableObject {
     /// Android uses (3000ms in CaptureScreens.kt).
     private let forceCaptureDeadline: TimeInterval = 3.0
 
+    /// **v1.9.0-rc6.2 — camera settle delay.** Minimum time between
+    /// camera-start and any capture firing. Without this, the auto-
+    /// capture path fires immediately when the detector sees a
+    /// document — but at camera-start the document is often
+    /// partially in frame from the user's reach, and the SDK
+    /// snapshots a bad framing before the user has settled the
+    /// phone into position. Stratum Remit 2026-06-06 feedback: "when
+    /// the camera first opens to the front of the DL, it fires too
+    /// quickly when it detects the doc in the frame. perhaps a 1 or
+    /// 2 seconds delay may allow the user fill the frame correctly."
+    ///
+    /// 1.5 seconds — long enough for the user to bring the document
+    /// into a stable frame, short enough that it doesn't feel
+    /// sluggish for users who pre-positioned the document before
+    /// the camera opened.
+    private let cameraSettleDelay: TimeInterval = 1.5
+
+    /// **v1.9.0-rc6.2** — set when the camera session starts; used
+    /// by the capture-trigger gate in `cameraManager(_:didOutput:)`.
+    private var cameraStartedAt: Date?
+
     func startCapture(onCapture: @escaping (Data) -> Void) {
         self.onCapture = onCapture
 
         cameraManager.delegate = self
         cameraManager.requestPermission { [weak self] granted in
+            guard let self = self else { return }
             guard granted else {
-                self?.feedbackMessage = "Camera access required"
+                self.feedbackMessage = "Camera access required"
                 return
             }
 
-            self?.cameraManager.configure(position: .back) { result in
+            self.cameraManager.configure(position: .back) { [weak self] result in
                 if case .success = result {
                     self?.cameraManager.start()
+                    // rc6.2: snapshot start time so the settle-delay
+                    // gate in the frame callback can suppress capture
+                    // for the first 1.5 seconds.
+                    self?.cameraStartedAt = Date()
                 }
             }
         }
@@ -457,6 +483,11 @@ class DocumentCaptureViewModel: ObservableObject {
         // instead of inheriting a stale timestamp from the prior burst.
         firstDetectedTime = nil
         documentScanner.resetStability()
+        // **v1.9.0-rc6.2** — re-arm the settle delay on retake so the
+        // user gets the same "frame your document" headroom they had
+        // on the initial capture instead of the SDK firing
+        // immediately the moment they reposition.
+        cameraStartedAt = Date()
     }
 
     func captureManually() {
@@ -578,7 +609,19 @@ extension DocumentCaptureViewModel: CameraManagerDelegate {
                 let elapsed = self.firstDetectedTime.map { Date().timeIntervalSince($0) } ?? 0
                 let forceCapture = elapsed >= self.forceCaptureDeadline
 
+                // **v1.9.0-rc6.2 — camera settle delay gate.** Suppress
+                // capture firing for the first 1.5 seconds after
+                // camera start, even if the detector says stable.
+                // Without this, the auto-capture path fires the
+                // instant the detector picks up the document — which
+                // is often mid-reach when the user is still bringing
+                // the document into the frame, producing a captured
+                // photo with the doc partially out of frame.
+                let timeSinceCameraStart = self.cameraStartedAt.map { Date().timeIntervalSince($0) } ?? .infinity
+                let pastSettleDelay = timeSinceCameraStart >= self.cameraSettleDelay
+
                 let shouldCapture = (result.isStable || forceCapture) &&
+                                    pastSettleDelay &&
                                     !self.isCapturing &&
                                     !self.hasPendingReview
 

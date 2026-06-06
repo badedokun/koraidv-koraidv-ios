@@ -97,6 +97,18 @@ Pod::Spec.new do |s|
     geometric heuristic that rc5 shipped (which clipped face/name).
     documentMode re-enabled for DocumentCaptureView. Mirrors Android's
     getLastBoundsFractional pattern.
+
+    v1.9.0-rc6.2: two fixes from Stratum Remit 2026-06-06 rc6.1 device
+    test. (1) FIRST EVER AUTO-APPROVED VERIFICATION (final_score
+    84.99, decision auto_approve) was invisible to the user because
+    iOS VerificationStatus enum had `approved` but backend uses
+    `verified`. JSONDecoder failed on the enum decode, surfaced as
+    "Failed to parse response: The data couldn't be read because it
+    isn't in the correct format." Fix: add `case verified = "verified"`.
+    Legacy `approved` retained for backwards compat. (2) Camera
+    settle delay: 1.5s minimum from camera-start before auto-capture
+    fires, so user can frame the document. Was firing immediately
+    when detector saw the document mid-reach.
   DESC
 
   s.homepage         = 'https://github.com/badedokun/koraidv-koraidv-ios'

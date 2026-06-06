@@ -46,13 +46,32 @@ public struct Verification: Codable {
 }
 
 /// Verification status
+///
+/// **v1.9.0-rc6.2 — `verified` case added.** The koraidv-identity
+/// backend uses `"verified"` as the wire string for the
+/// auto-approved terminal state (see
+/// `services/identity-service/internal/models/verification.go:16`
+/// — `StatusVerified VerificationStatus = "verified"`). The iOS enum
+/// had `"approved"` instead, which never matched anything the
+/// backend produced. Result: the FIRST ever auto-approved
+/// verification (Stratum Remit 2026-06-06, verification
+/// `60d9e3a6...`, final_score 84.99) returned 200 from `/complete`,
+/// but JSONDecoder couldn't decode the status field — surfaced to
+/// the user as "Failed to parse response: The data couldn't be read
+/// because it isn't in the correct format." Approved verification,
+/// invisible to the user.
+///
+/// `approved` retained for backwards compat — never produced by
+/// koraidv-identity but may exist in older backends or in mocked
+/// test fixtures.
 public enum VerificationStatus: String, Codable {
     case pending = "pending"
     case documentRequired = "document_required"
     case selfieRequired = "selfie_required"
     case livenessRequired = "liveness_required"
     case processing = "processing"
-    case approved = "approved"
+    case verified = "verified"        // rc6.2: backend's auto-approve terminal status
+    case approved = "approved"        // legacy, kept for backwards compat
     case rejected = "rejected"
     case reviewRequired = "review_required"
     case expired = "expired"
