@@ -30,6 +30,38 @@ final class VerificationFlowController {
     private var capturedMRZData: MRZData?
     private var nfcPassportData: NFCPassportData?
 
+    /// **v1.9.0-rc6.4** — count of liveness challenge submissions
+    /// currently in flight to the backend. Incremented in
+    /// `handleChallengeComplete` when the POST starts; decremented in
+    /// the completion handler. `completeVerification()` is gated on
+    /// this reaching zero so we don't fire `/complete` while the
+    /// final challenge's image upload is still in flight. Stratum
+    /// Remit 2026-06-06 rc6.3 server log showed the race: challenge
+    /// #3 POST landed 2.2s AFTER /complete had already fired, so the
+    /// backend ignored the late submission and the verification was
+    /// scored on only 2 of 3 challenges.
+    private var pendingChallengeSubmissions: Int = 0
+
+    /// **v1.9.0-rc6.4** — set when LivenessView fires `onAllComplete`
+    /// while there are still in-flight challenge POSTs. Once
+    /// `pendingChallengeSubmissions` drains to zero, the deferred
+    /// `completeVerification()` call fires.
+    private var awaitingChallengesBeforeComplete: Bool = false
+
+    /// **v1.9.0-rc6.4** — minimum dwell time on the ProcessingScreen
+    /// after `completeVerification()` is called. The backend's
+    /// `/complete` endpoint typically returns in ~100ms, which means
+    /// the ProcessingScreen is replaced by the SuccessScreen before
+    /// the user can perceive it. Android has a similar minimum-dwell
+    /// pattern so the verification-in-progress animation always
+    /// registers. 1.5s is long enough to be visible without feeling
+    /// like artificial latency.
+    private let processingMinDwell: TimeInterval = 1.5
+
+    /// Timestamp when the ProcessingScreen was pushed; used to
+    /// compute the remaining dwell time before showing the result.
+    private var processingShownAt: Date?
+
     // MARK: - Initialization
 
     init(
@@ -425,7 +457,10 @@ final class VerificationFlowController {
                 self?.handleChallengeComplete(challenge: challenge, imageData: imageData)
             },
             onAllComplete: { [weak self] in
-                self?.completeVerification()
+                // rc6.4: route through onAllChallengesReported so the
+                // /complete POST waits for any in-flight final-challenge
+                // submission to land first.
+                self?.onAllChallengesReported()
             },
             onCancel: { [weak self] in
                 self?.cancel()
@@ -437,12 +472,26 @@ final class VerificationFlowController {
     }
 
     private func handleChallengeComplete(challenge: LivenessChallenge, imageData: Data) {
+        // **v1.9.0-rc6.4** — track in-flight challenge submission so
+        // completeVerification() can wait for it before firing /complete.
+        // Without this, LivenessView fires onAllComplete (which calls
+        // completeVerification) the moment the LivenessManager records
+        // the last challenge result — *before* the host has actually
+        // POSTed the image to the backend. Server gets /complete
+        // before the last challenge image, ignores the late upload,
+        // verification scored on N-1 challenges. Stratum Remit
+        // 2026-06-06 rc6.3 server log proved the race.
+        pendingChallengeSubmissions += 1
+
         sessionManager.submitLivenessChallenge(
             verificationId: verification.id,
             challenge: challenge,
             imageData: imageData
         ) { [weak self] result in
             DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.pendingChallengeSubmissions = max(0, self.pendingChallengeSubmissions - 1)
+
                 switch result {
                 case .success(let response):
                     // `challengePassed` is optional now (1.6.1) — server
@@ -451,12 +500,36 @@ final class VerificationFlowController {
                     // now, treat missing-or-true as passed so decode
                     // never blocks progress.
                     if response.challengePassed ?? true {
-                        self?.completedChallenges.insert(challenge.id)
+                        self.completedChallenges.insert(challenge.id)
                     }
                 case .failure(let error):
-                    self?.showError(error)
+                    self.showError(error)
+                    return
+                }
+
+                // rc6.4: if LivenessView's onAllComplete fired while we
+                // were waiting for this POST, fire the deferred
+                // completeVerification now that all challenges are in.
+                if self.awaitingChallengesBeforeComplete && self.pendingChallengeSubmissions == 0 {
+                    self.awaitingChallengesBeforeComplete = false
+                    self.completeVerification()
                 }
             }
+        }
+    }
+
+    /// **v1.9.0-rc6.4** — called by LivenessView's onAllComplete
+    /// callback. Either fires `completeVerification()` immediately
+    /// (all challenge POSTs already settled) or defers via the
+    /// `awaitingChallengesBeforeComplete` flag (last challenge POST
+    /// still in flight; the per-POST completion handler will fire
+    /// completeVerification when it lands).
+    private func onAllChallengesReported() {
+        if pendingChallengeSubmissions == 0 {
+            completeVerification()
+        } else {
+            KoraIDV.log("VFC: onAllComplete fired with \(pendingChallengeSubmissions) challenge POST(s) still in flight; deferring /complete")
+            awaitingChallengesBeforeComplete = true
         }
     }
 
@@ -470,15 +543,41 @@ final class VerificationFlowController {
             ProcessingStepItem(label: "Finalizing results", status: .pending),
         ])
         pushView(processingView)
+        // **v1.9.0-rc6.4** — record when the ProcessingScreen became
+        // visible so the success path can hold the result transition
+        // for the remaining `processingMinDwell` window if /complete
+        // returns very quickly.
+        processingShownAt = Date()
 
         sessionManager.completeVerification(verificationId: verification.id) { [weak self] result in
             DispatchQueue.main.async {
+                guard let self = self else { return }
                 switch result {
                 case .success(let verification):
-                    self?.showResult(verification: verification)
+                    // **v1.9.0-rc6.4 — minimum dwell.** Backend's
+                    // /complete typically returns in ~100ms (rc6.3
+                    // measured 113ms). Without a minimum dwell, the
+                    // ProcessingScreen pushed above flashes for one
+                    // animation frame before being replaced by the
+                    // SuccessScreen — Stratum Remit 2026-06-06 rc6.3
+                    // feedback: "we got the result page but did not
+                    // see the processing page." Hold the result push
+                    // until at least `processingMinDwell` has elapsed
+                    // since ProcessingScreen appeared, so the user
+                    // always sees the verification-in-progress
+                    // animation register.
+                    let elapsed = self.processingShownAt.map { Date().timeIntervalSince($0) } ?? .infinity
+                    let remaining = max(0, self.processingMinDwell - elapsed)
+                    if remaining > 0 {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + remaining) { [weak self] in
+                            self?.showResult(verification: verification)
+                        }
+                    } else {
+                        self.showResult(verification: verification)
+                    }
 
                 case .failure(let error):
-                    self?.showError(error)
+                    self.showError(error)
                 }
             }
         }

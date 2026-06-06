@@ -121,6 +121,18 @@ Pod::Spec.new do |s|
     on Processing for 1+ minute. Added `.verified` to both switches
     paired with `.approved` so both wire strings route to the
     SuccessScreen.
+
+    v1.9.0-rc6.4: US DL baseline-smoothness fixes from rc6.3 device
+    test. (1) ProcessingScreen min dwell time 1.5s — was flashing
+    invisibly because /complete returns in ~100ms; user perceived
+    "did not see the processing page". (2) Race condition fix:
+    LivenessView's onAllComplete fired before the final challenge's
+    image POST completed, so /complete arrived at the backend before
+    challenge N's image and was scored on N-1 challenges. Now tracks
+    pendingChallengeSubmissions and defers completeVerification until
+    all challenge POSTs are confirmed. Establishes solid US DL
+    baseline before cross-document testing (NG passport,
+    US passport, mismatch cases, etc.).
   DESC
 
   s.homepage         = 'https://github.com/badedokun/koraidv-koraidv-ios'
