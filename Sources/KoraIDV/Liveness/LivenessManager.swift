@@ -23,6 +23,39 @@ protocol LivenessManagerDelegate: AnyObject {
     func livenessManager(_ manager: LivenessManager, didCompleteChallenge challenge: LivenessChallenge, passed: Bool, imageData: Data?)
     func livenessManager(_ manager: LivenessManager, didComplete result: LivenessResult)
     func livenessManager(_ manager: LivenessManager, didFail error: KoraError)
+
+    /// **v1.9.0-rc6** — emitted whenever the face-detected state
+    /// changes (true = face is visible in front of the camera with
+    /// confidence ≥ `FaceDetector.minimumConfidence`; false = not).
+    /// LivenessView uses this to color the oval guide (grey when no
+    /// face, green when face detected) and to gate the countdown so
+    /// it doesn't fire 3-2-1 to an empty viewport. Without this
+    /// signal there was no way for the UI to know the SDK was seeing
+    /// the user, which produced Stratum Remit's 2026-06-06 report
+    /// "grey oval never turns green and the count down goes from 3
+    /// to 1 and just transition to another challenge."
+    func livenessManager(_ manager: LivenessManager, didChangeFaceDetected detected: Bool)
+
+    /// **v1.9.0-rc6** — emitted when the SDK is ready for the user to
+    /// perform the current challenge gesture. Fires after the countdown
+    /// completes AND the face is in confident range. The UI should
+    /// show a "Go!" indicator at this point; ChallengeDetector begins
+    /// scoring gestures only after this signal. Without this gate,
+    /// ChallengeDetector picked up natural micro-movements during the
+    /// 3-second countdown and silently auto-completed challenges
+    /// before the user could react.
+    func livenessManager(_ manager: LivenessManager, didActivateChallenge challenge: LivenessChallenge)
+}
+
+// MARK: - Default delegate implementations (for backwards compat)
+//
+// rc6 added two new delegate methods. Default no-op implementations
+// keep existing in-tree conformers (LivenessViewModel) compiling
+// even if they don't yet implement the new callbacks — and protect
+// any external test mocks from breaking.
+extension LivenessManagerDelegate {
+    func livenessManager(_ manager: LivenessManager, didChangeFaceDetected detected: Bool) {}
+    func livenessManager(_ manager: LivenessManager, didActivateChallenge challenge: LivenessChallenge) {}
 }
 
 /// Liveness Manager for challenge-response verification
@@ -51,7 +84,23 @@ final class LivenessManager: NSObject {
     private var _challengeResults: [ChallengeResultItem] = []
     private var _isProcessing = false
     private var _frameCount = 0
-    private let maxFramesPerChallenge = 300
+    private var _isFaceDetected = false
+    private var _isChallengeActive = false
+
+    /// **v1.9.0-rc6** — bumped 300 → 600. At 30fps that's 20s of
+    /// per-challenge budget instead of 10s. The 10s budget was too
+    /// tight: countdown (3s) + face-acquire (1–3s) + react (1s) +
+    /// perform-gesture (2–4s) = 7–11s in real-world testing.
+    /// Stratum Remit's 2026-06-06 rc5 test hit the 10s ceiling on
+    /// every challenge — frame budget exhausted before the user could
+    /// complete the gesture, recordChallengeResult fired with nil
+    /// imageData, the rc3 LivenessView guard suppressed the bad
+    /// submission, and the SDK silently advanced. 20s gives enough
+    /// headroom that a deliberate user can finish.
+    ///
+    /// rc6 also gates the budget — see `processFrame` — so frames
+    /// processed during the countdown don't burn this allowance.
+    private let maxFramesPerChallenge = 600
 
     /// Thread-safe access to currentChallengeIndex
     private var currentChallengeIndex: Int {
@@ -69,6 +118,30 @@ final class LivenessManager: NSObject {
     private var frameCount: Int {
         get { stateQueue.sync { _frameCount } }
         set { stateQueue.sync { _frameCount = newValue } }
+    }
+
+    /// **v1.9.0-rc6** — true while the user's face is visible in the
+    /// camera with sufficient confidence. Drives the LivenessView oval
+    /// color (grey → green) and gates the countdown so it doesn't
+    /// fire to an empty viewport. Updated on every detector callback;
+    /// delegate is notified only on state transitions.
+    private var isFaceDetected: Bool {
+        get { stateQueue.sync { _isFaceDetected } }
+        set { stateQueue.sync { _isFaceDetected = newValue } }
+    }
+
+    /// **v1.9.0-rc6** — true once LivenessView has signaled that the
+    /// countdown completed AND face has been continuously detected.
+    /// Until then, frames flow into faceDetector for state updates
+    /// only — `challengeDetector.process` is skipped so natural
+    /// micro-movements during the 3-second countdown can't
+    /// auto-complete the challenge (the rc5 root cause of "challenges
+    /// transition before user can react"). Set by the public
+    /// `activateChallenge()` method called from LivenessView; reset
+    /// by `startNextChallenge()`.
+    private var isChallengeActive: Bool {
+        get { stateQueue.sync { _isChallengeActive } }
+        set { stateQueue.sync { _isChallengeActive = newValue } }
     }
 
     /// Thread-safe append to challengeResults
@@ -162,10 +235,39 @@ final class LivenessManager: NSObject {
         }
 
         challengeDetector.reset()
-        stateQueue.sync { _frameCount = 0 }
+        stateQueue.sync {
+            _frameCount = 0
+            // **v1.9.0-rc6** — challenge starts in *inactive* state.
+            // ChallengeDetector frames are suppressed (only face-state
+            // updates flow) until LivenessView signals
+            // `activateChallenge()` after its countdown completes.
+            _isChallengeActive = false
+        }
         challengeDetector.startDetecting(challengeType: challenge.type)
 
         delegate?.livenessManager(self, didStartChallenge: challenge)
+    }
+
+    /// **v1.9.0-rc6** — called by LivenessView after its countdown
+    /// completes (and only while face is in detected range), signaling
+    /// that the SDK should start scoring user gestures for the current
+    /// challenge. ChallengeDetector frames before this call are
+    /// ignored so the SDK can't auto-complete on user movement during
+    /// the countdown.
+    ///
+    /// Idempotent — safe to call multiple times on the same challenge
+    /// (the detector itself debounces).
+    func activateChallenge() {
+        guard let challenge = currentChallenge else { return }
+        let wasActive = isChallengeActive
+        isChallengeActive = true
+        if !wasActive {
+            KoraIDV.log("LivenessManager: activated challenge=\(challenge.type) — gesture scoring on")
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.delegate?.livenessManager(self, didActivateChallenge: challenge)
+            }
+        }
     }
 
     private func moveToNextChallenge() {
@@ -192,18 +294,23 @@ final class LivenessManager: NSObject {
     private func processFrame(_ sampleBuffer: CMSampleBuffer) {
         guard !isProcessing, let challenge = currentChallenge else { return }
 
-        // Enforce per-challenge frame budget
-        guard frameCount < maxFramesPerChallenge else {
-            // rc3 diagnostic: frame budget is the most common nil-path
-            // — at 30fps a 300-frame budget exhausts in ~10s, which
-            // matches the "400 after about 15 or less seconds" symptom
-            // Stratum reported when the face confidence threshold
-            // never let challenge detection fire.
-            KoraIDV.log("LivenessManager: frame budget exhausted (\(maxFramesPerChallenge)) for challenge=\(challenge.type); recording nil imageData")
-            recordChallengeResult(challenge: challenge, passed: false, confidence: 0, imageData: nil)
-            return
+        // **v1.9.0-rc6** — frame budget only counts frames *after the
+        // challenge becomes active* (i.e. after LivenessView's
+        // countdown completes). Frames consumed during the countdown
+        // for face-detection updates do NOT burn this allowance, so
+        // the 20-second budget represents 20 seconds of *gesture
+        // attempt time*, not 20 seconds of total wall clock. Previous
+        // behavior counted every frame, so a 3-second countdown +
+        // 1-second face-acquire ate 4 seconds of the 10-second budget
+        // before the user even saw the prompt.
+        if isChallengeActive {
+            guard frameCount < maxFramesPerChallenge else {
+                KoraIDV.log("LivenessManager: frame budget exhausted (\(maxFramesPerChallenge)) for challenge=\(challenge.type); recording nil imageData")
+                recordChallengeResult(challenge: challenge, passed: false, confidence: 0, imageData: nil)
+                return
+            }
+            frameCount += 1
         }
-        frameCount += 1
         isProcessing = true
 
         faceDetector.detectFaces(in: sampleBuffer) { [weak self] result in
@@ -211,11 +318,33 @@ final class LivenessManager: NSObject {
 
             defer { self.isProcessing = false }
 
+            // **v1.9.0-rc6** — always update face-detected state, even
+            // when the challenge isn't active yet (LivenessView needs
+            // this signal to color the oval green and to start its
+            // countdown only once face is in confident range). The
+            // ChallengeDetector branch below is what's gated, not face
+            // detection.
+            let faceVisible = (result?.faces.first != nil)
+            let priorFaceState = self.isFaceDetected
+            if priorFaceState != faceVisible {
+                self.isFaceDetected = faceVisible
+                DispatchQueue.main.async {
+                    self.delegate?.livenessManager(self, didChangeFaceDetected: faceVisible)
+                }
+            }
+
             guard let faceResult = result, let face = faceResult.faces.first else {
                 return
             }
 
-            // Process challenge detection
+            // **v1.9.0-rc6** — gate gesture scoring on isChallengeActive.
+            // Frames before activation update face-detected state above
+            // (so the UI can react) but don't feed the gesture
+            // detector. This is the single most important rc6 change:
+            // it stops the SDK from auto-completing challenges on
+            // user movement during the 3-second countdown.
+            guard self.isChallengeActive else { return }
+
             let detectionResult = self.challengeDetector.process(
                 face: face,
                 challengeType: challenge.type

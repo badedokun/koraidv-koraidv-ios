@@ -65,6 +65,22 @@ Pod::Spec.new do |s|
     typed nameMatch score (we just weren't reading it). Fix: read
     `scores.nameMatch` directly. All four displayed metrics now come
     from the typed `verification.scores` source.
+
+    v1.9.0-rc6: liveness challenge orchestration. ChallengeDetector
+    now only scores gestures after LivenessView's countdown completes
+    (frames during countdown update face-detected state but don't feed
+    the gesture detector — fixes the rc5 root cause of "challenges
+    auto-complete from natural micro-movements"). New delegate
+    callbacks `didChangeFaceDetected` + `didActivateChallenge` plumb
+    face state and activation timing to the UI. Oval color now goes
+    grey → green when face is in confident range. Countdown waits to
+    start until face is detected (no more 3→2→1 firing to empty
+    viewport). Per-challenge frame budget bumped 300 → 600 (20s
+    gesture-attempt time instead of 10s wall-clock). Default
+    no-op delegate methods preserve backwards compatibility for
+    custom LivenessManagerDelegate conformers.
+
+    Document bbox-based crop deferred to rc6.1.
   DESC
 
   s.homepage         = 'https://github.com/badedokun/koraidv-koraidv-ios'

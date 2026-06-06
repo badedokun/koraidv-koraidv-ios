@@ -75,11 +75,21 @@ struct LivenessView: View {
                 Spacer().frame(height: 24)
 
                 // Oval viewfinder with progress ring
+                //
+                // **v1.9.0-rc6** — oval color now reflects face-detected
+                // state from LivenessManager:
+                //   - grey  (`Color.white.opacity(0.2)`): no face detected
+                //   - green (`Color.green`)              : face in confident range
+                // Without this signal users had no way to know the SDK
+                // was seeing them, and the countdown fired to an empty
+                // viewport (Stratum Remit 2026-06-06 report: "grey oval
+                // never turns green").
                 ZStack {
-                    // Background oval
+                    // Background oval — color reflects face state
                     Ellipse()
-                        .stroke(Color.white.opacity(0.2), lineWidth: 3)
+                        .stroke(viewModel.isFaceDetected ? Color.green : Color.white.opacity(0.2), lineWidth: 3)
                         .frame(width: 240, height: 300)
+                        .animation(.easeInOut(duration: 0.2), value: viewModel.isFaceDetected)
 
                     // Progress ring
                     Ellipse()
@@ -91,7 +101,7 @@ struct LivenessView: View {
                         .accessibilityLabel("Challenge progress")
                         .accessibilityValue("\(Int(viewModel.challengeProgress * 100)) percent")
 
-                    // Countdown badge
+                    // Countdown badge (only fires once face is detected)
                     if viewModel.countdown > 0 {
                         CountdownBadge(count: viewModel.countdown)
                             .offset(y: -130)
@@ -162,10 +172,23 @@ class LivenessViewModel: ObservableObject {
     @Published var completedChallenges: Int = 0
     @Published var countdown: Int = 0
 
+    /// **v1.9.0-rc6** — published face-detected state from LivenessManager.
+    /// Drives the oval color (grey when false, green when true) and
+    /// gates the countdown (paused while false). Updated via the new
+    /// `livenessManager(_:didChangeFaceDetected:)` delegate callback.
+    @Published var isFaceDetected: Bool = false
+
     let livenessManager = LivenessManager()
     private let session: LivenessSession
     private var onChallengeComplete: ((LivenessChallenge, Data) -> Void)?
     private var onAllComplete: (() -> Void)?
+
+    /// **v1.9.0-rc6** — tracks whether the countdown for the current
+    /// challenge has been started. Once a challenge begins (via
+    /// `didStartChallenge`), the countdown waits for face-detected to
+    /// flip true before starting; this flag prevents re-arming if face
+    /// briefly drops and reappears.
+    private var countdownStartedForCurrentChallenge = false
 
     init(session: LivenessSession) {
         self.session = session
@@ -199,9 +222,43 @@ extension LivenessViewModel: LivenessManagerDelegate {
         DispatchQueue.main.async {
             self.currentChallenge = challenge
             self.challengeProgress = 0
+            // **v1.9.0-rc6** — show 3 in the UI but DON'T tick down
+            // yet. The countdown waits for the user's face to be in
+            // confident range (`didChangeFaceDetected(true)`) before
+            // it starts. Before rc6 the countdown fired immediately
+            // on challenge start regardless of face state, so it
+            // raced down 3→2→1→0 to an empty viewport while the user
+            // was still re-acquiring the camera.
             self.countdown = 3
-            self.startCountdown()
+            self.countdownStartedForCurrentChallenge = false
+            self.isFaceDetected = false  // reset; will refresh from next detection
         }
+    }
+
+    /// **v1.9.0-rc6** — face-detected state changed. Update the oval
+    /// color and, if this is the first time face is detected for the
+    /// current challenge, start the countdown.
+    func livenessManager(_ manager: LivenessManager, didChangeFaceDetected detected: Bool) {
+        DispatchQueue.main.async {
+            self.isFaceDetected = detected
+            if detected
+                && !self.countdownStartedForCurrentChallenge
+                && self.currentChallenge != nil
+                && self.countdown > 0
+            {
+                self.countdownStartedForCurrentChallenge = true
+                self.startCountdown()
+            }
+        }
+    }
+
+    /// **v1.9.0-rc6** — challenge activated by the SDK; user can now
+    /// perform the gesture. No UI change needed beyond what
+    /// `didChangeFaceDetected` already showed; the activation signal
+    /// exists so the SDK side can switch on gesture scoring (no
+    /// auto-completion on micro-movements during countdown).
+    func livenessManager(_ manager: LivenessManager, didActivateChallenge challenge: LivenessChallenge) {
+        KoraIDV.log("LivenessView: challenge=\(challenge.type) activated — gesture scoring on")
     }
 
     func livenessManager(_ manager: LivenessManager, didUpdateProgress progress: Float, for challenge: LivenessChallenge) {
@@ -262,6 +319,13 @@ extension LivenessViewModel: LivenessManagerDelegate {
             self.countdown -= 1
             if self.countdown > 0 {
                 self.startCountdown()
+            } else {
+                // **v1.9.0-rc6** — countdown finished. Signal the SDK
+                // that gesture scoring can begin. ChallengeDetector
+                // frames before this call were ignored, preventing
+                // auto-completion from micro-movements during the
+                // 3-second countdown.
+                self.livenessManager.activateChallenge()
             }
         }
     }

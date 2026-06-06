@@ -176,7 +176,7 @@ public final class KoraIDV {
     /// an rc2 build, making it impossible to correlate backend logs
     /// with the actual SDK version that produced them.
     public static var version: String {
-        "1.9.0-rc5.2"
+        "1.9.0-rc6"
     }
 
     /// Reset the SDK configuration
