@@ -136,11 +136,20 @@ final class DocumentScanner {
         let height = CGFloat(CVPixelBufferGetHeight(pixelBuffer))
 
         let visionImage = VisionImage(buffer: sampleBuffer)
-        // Back-facing camera in portrait device orientation: video sample
-        // buffer arrives in sensor-native landscape; we rotate-right to
-        // get portrait-oriented text recognition. ML Kit uses this hint
-        // to rotate before running the recognition graph.
-        visionImage.orientation = .right
+        // **v1.9.0-rc2 fix.** CameraManager configures the video output
+        // connection with `videoOrientation = .portrait`, which causes
+        // AVFoundation to physically rotate the sample buffer to portrait
+        // before delivery. The pixel buffer arrives at 1080w × 1920h,
+        // already display-oriented. Setting `.right` here in rc1 was
+        // double-rotating: ML Kit rotated the already-portrait buffer
+        // 90° more, processed a landscape image, and returned text
+        // frames in 1920×1080 coords. Clamping those against our
+        // width=1080/height=1920 then truncated the bbox, collapsing
+        // coverage well below the 0.35 threshold and triggering false
+        // "Move closer" guidance at framing where Android auto-captures
+        // cleanly. The buffer is already upright — use `.up`. Reference
+        // to AVFoundation rotation behavior in CameraManager.swift:297.
+        visionImage.orientation = .up
 
         isAnalyzing = true
 
@@ -180,6 +189,15 @@ final class DocumentScanner {
                     maxX = max(maxX, frame.maxX)
                     maxY = max(maxY, frame.maxY)
                 }
+
+                // Snapshot raw bbox for diagnostic logging — QA needs to
+                // see the unpadded text-block union to verify the
+                // coverage divergence root-caused in rc1.
+                let rawMinX = minX
+                let rawMinY = minY
+                let rawMaxX = maxX
+                let rawMaxY = maxY
+                let rawArea = (rawMaxX - rawMinX) * (rawMaxY - rawMinY)
 
                 // 10% padding (same as Android — earlier branchless
                 // single-block logic that synthesized a 70%-wide centered
@@ -236,6 +254,17 @@ final class DocumentScanner {
                     boundingBox: boundingBox
                 )
 
+                // rc2 diagnostic: emit full coverage chain so QA can
+                // cross-check against Android logs at the same framing.
+                // Order: frame dims → raw bbox dims/area → padded bbox
+                // dims/area → coverage → guidance decision.
+                KoraIDV.log(String(
+                    format: "DocumentScanner coverage: frame=%.0fx%.0f rawBbox=%.0fx%.0f (area=%.0f) paddedBbox=%.0fx%.0f (area=%.0f) frameArea=%.0f coverage=%.4f",
+                    Float(width), Float(height),
+                    Float(rawMaxX - rawMinX), Float(rawMaxY - rawMinY), Float(rawArea),
+                    Float(maxX - minX), Float(maxY - minY), Float(textArea),
+                    Float(imageArea), Float(coverage)
+                ))
                 KoraIDV.log("DocumentScanner exit: success — blocks=\(blockCount) confidence=\(confidence) coverage=\(String(format: "%.2f", Float(coverage))) isStable=\(isStable) guidance=\(qualityGuidance ?? "nil")")
 
                 self.lastDetectionResult = detection

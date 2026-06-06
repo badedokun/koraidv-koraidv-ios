@@ -11,6 +11,11 @@ Pod::Spec.new do |s|
     cross-platform behavioral parity with the Android SDK. Same detection
     algorithm, same thresholds, same output as koraidv-android — drops Apple
     Vision's device-sensitive geometric segmentation.
+
+    v1.9.0-rc2: orientation fix — rc1 set VisionImage.orientation = .right,
+    double-rotating the already-portrait CameraManager buffer and collapsing
+    text-bbox coverage below the 0.35 threshold. Plus os_log migration so
+    TestFlight builds can be diagnosed without a debug attach.
   DESC
 
   s.homepage         = 'https://github.com/badedokun/koraidv-koraidv-ios'

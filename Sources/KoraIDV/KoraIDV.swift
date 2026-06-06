@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import os
 
 /// Main entry point for the Kora IDV SDK
 public final class KoraIDV {
@@ -187,10 +188,19 @@ public final class KoraIDV {
         shared.state?.configuration.debugLogging ?? false
     }
 
-    /// Log a debug message. Only prints when debugLogging is enabled.
+    /// Unified Apple logging channel for the SDK. Routes through `os_log` so
+    /// release builds (TestFlight, App Store) emit to the unified logging
+    /// system and show up in Console.app without a debug attach. Previously
+    /// used `print()`, which only reaches Xcode's debug console — invisible
+    /// to QA running TestFlight builds on dedicated test devices.
+    private static let logger = Logger(subsystem: "com.koraidv.sdk", category: "KoraIDV")
+
+    /// Log a debug message. Only emits when debugLogging is enabled.
+    /// Format kept identical (`[KoraIDV] <message>`) so existing log-grep
+    /// tooling and the test team's filters keep working.
     internal static func log(_ message: @autoclosure () -> String) {
         if debugLogging {
-            print("[KoraIDV] \(message())")
+            logger.debug("[KoraIDV] \(message(), privacy: .public)")
         }
     }
 }
