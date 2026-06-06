@@ -56,6 +56,15 @@ Pod::Spec.new do |s|
     rc4 behavior (full 1080×1920 portrait DL capture). Selfie Match
     display fix from rc5 stays. Proper bbox-based document cropping
     deferred to rc6.
+
+    v1.9.0-rc5.2: hotfix result-screen score math. Two bugs in
+    ScoreBreakdown.compute: (1) Overall was displaying `riskScore`
+    directly, but backend sends riskScore as the inverse of final_score
+    (100 - final). Fix: invert to recover overall. (2) Name Match was
+    a placeholder derived from `faceMatch + 10`; backend now emits a
+    typed nameMatch score (we just weren't reading it). Fix: read
+    `scores.nameMatch` directly. All four displayed metrics now come
+    from the typed `verification.scores` source.
   DESC
 
   s.homepage         = 'https://github.com/badedokun/koraidv-koraidv-ios'

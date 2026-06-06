@@ -641,59 +641,82 @@ struct ScoreBreakdown {
     let overallScore: Int
 
     static func compute(from verification: Verification) -> ScoreBreakdown {
-        // **v1.9.0-rc5 — scale mismatch fix.** Prior code read from
-        // `verification.faceVerification?.matchScore` and multiplied
-        // by 100. The backend (`identity-service` line 553–557)
-        // serializes `faceVerification.matchScore` directly from
-        // `v.FaceMatchScore` which is already on the 0–100 scale —
-        // so the multiplier produced `Int(78.94 * 100) = 7893` and
-        // the result screen rendered "Selfie Match: 7,893%" on
-        // Stratum Remit's 2026-06-06 rc4 device test.
+        // **v1.9.0-rc5.2 — overall + nameMatch fix.**
         //
-        // Same hazard exists for `livenessVerification.livenessScore`
-        // (backend sends `session.OverallScore` which is also 0–100)
-        // and was silently invisible only because liveness has been
-        // stuck at 0 in our test runs — `0 * 100 = 0` either way.
+        // rc5 already fixed the per-metric scale issue (read from typed
+        // `verification.scores` instead of multiplying
+        // `faceVerification.matchScore` by 100). Stratum Remit's
+        // 2026-06-06 rc5.1 device test surfaced two more math bugs in
+        // the same function:
         //
-        // Fix: read from `verification.scores` (`VerificationScores`)
-        // which is the single typed source of truth on the wire,
-        // documented as 0–100 for every field
-        // (`identity-service/internal/models/verification.go:110`).
-        // No multiplier. Both the score values and the rejection
-        // reason in the screenshot now match what the server logged.
+        // 1. **Overall was displaying `riskScore` directly.** Backend
+        //    sends `riskScore = int(100 - final_score)` — i.e. the
+        //    *inverse* of overall. For a verification with
+        //    `final_score = 73.62`, backend sent `riskScore = 26`, and
+        //    iOS rendered "Overall Score: 26%" with all individual
+        //    metrics 72/82/92/0. User correctly flagged "the math is
+        //    not right": (0+82+92+72)/4 = 61 expected, 26 displayed.
+        //    Fix: invert riskScore (`100 - risk`) to recover overall.
+        //    Fallback to `scores.overall` (IDV-only) when riskScore
+        //    absent.
         //
-        // Fallback to the older fields if `scores` is absent (very
-        // old backend or pre-/complete responses), preserving the
-        // multiply-by-100 path since those wire shapes used 0–1
-        // floats. Defensive only — current backend always emits
-        // `scores` on `/complete`.
+        // 2. **Name Match was derived from `faceMatch + 10`.** A
+        //    placeholder from before the backend emitted a typed
+        //    nameMatch score. Same verification: server had
+        //    `nameMatch: 100`, iOS displayed 92 (82+10). Fix: read
+        //    `scores.nameMatch` directly.
+        //
+        // All four displayed metrics now come from the same typed
+        // 0-100 source (`scores`). Old fallback path preserved for
+        // backends that don't emit `scores` (defensive only — current
+        // backend always emits on /complete).
         let scores = verification.scores
         let livenessScore: Int
         let faceScore: Int
         let docScore: Int
+        let nameScore: Int
+        let overallScore: Int
+
         if let scores = scores {
             livenessScore = Int(scores.liveness)
             faceScore = Int(scores.faceMatch)
-            // `documentAuth` on `VerificationScores` is the same
-            // semantic value as `documentVerification.authenticityScore`
-            // (the latter is `documentAuth / 100.0` on the wire). We
-            // use the typed-scores field here for consistency with
-            // the other two.
             docScore = Int(scores.documentAuth)
+            nameScore = Int(scores.nameMatch)
+            // Prefer `100 - riskScore` over `scores.overall` because
+            // riskScore is derived from `final_score` (post-compliance
+            // blend) which is what the backend's auto-reject decision
+            // actually used. `scores.overall` is IDV-only and would
+            // understate the user-perceived "overall" by the compliance
+            // weight. Falls back to scores.overall if riskScore absent.
+            if let risk = verification.riskScore {
+                overallScore = max(0, min(100, 100 - risk))
+            } else {
+                overallScore = Int(scores.overall)
+            }
         } else {
+            // Legacy fallback for backends that don't emit `scores`.
+            // Keeps the old multiply-by-100 path (those wire shapes
+            // used 0-1 floats) and the derived nameMatch.
             livenessScore = Int((verification.livenessVerification?.livenessScore ?? 0) * 100)
             faceScore = Int((verification.faceVerification?.matchScore ?? 0) * 100)
             docScore = Int((verification.documentVerification?.authenticityScore ?? 0) * 100)
+            nameScore = faceScore > 0 ? min(faceScore + 10, 100) : 0
+            // Even on the legacy path, riskScore is the inverse of
+            // overall — preserve the invert semantic. The prior code
+            // erroneously assigned riskScore directly to overall.
+            if let risk = verification.riskScore {
+                overallScore = max(0, min(100, 100 - risk))
+            } else {
+                overallScore = (livenessScore + nameScore + docScore + faceScore) / 4
+            }
         }
-        let nameScore = faceScore > 0 ? min(faceScore + 10, 100) : 0
-        let overall = verification.riskScore ?? ((livenessScore + nameScore + docScore + faceScore) / 4)
 
         return ScoreBreakdown(
             liveness: livenessScore,
             nameMatch: nameScore,
             documentQuality: docScore,
             selfieMatch: faceScore,
-            overallScore: overall
+            overallScore: overallScore
         )
     }
 }
