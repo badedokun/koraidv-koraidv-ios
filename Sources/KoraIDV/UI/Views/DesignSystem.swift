@@ -641,9 +641,50 @@ struct ScoreBreakdown {
     let overallScore: Int
 
     static func compute(from verification: Verification) -> ScoreBreakdown {
-        let livenessScore = Int((verification.livenessVerification?.livenessScore ?? 0) * 100)
-        let faceScore = Int((verification.faceVerification?.matchScore ?? 0) * 100)
-        let docScore = Int((verification.documentVerification?.authenticityScore ?? 0) * 100)
+        // **v1.9.0-rc5 — scale mismatch fix.** Prior code read from
+        // `verification.faceVerification?.matchScore` and multiplied
+        // by 100. The backend (`identity-service` line 553–557)
+        // serializes `faceVerification.matchScore` directly from
+        // `v.FaceMatchScore` which is already on the 0–100 scale —
+        // so the multiplier produced `Int(78.94 * 100) = 7893` and
+        // the result screen rendered "Selfie Match: 7,893%" on
+        // Stratum Remit's 2026-06-06 rc4 device test.
+        //
+        // Same hazard exists for `livenessVerification.livenessScore`
+        // (backend sends `session.OverallScore` which is also 0–100)
+        // and was silently invisible only because liveness has been
+        // stuck at 0 in our test runs — `0 * 100 = 0` either way.
+        //
+        // Fix: read from `verification.scores` (`VerificationScores`)
+        // which is the single typed source of truth on the wire,
+        // documented as 0–100 for every field
+        // (`identity-service/internal/models/verification.go:110`).
+        // No multiplier. Both the score values and the rejection
+        // reason in the screenshot now match what the server logged.
+        //
+        // Fallback to the older fields if `scores` is absent (very
+        // old backend or pre-/complete responses), preserving the
+        // multiply-by-100 path since those wire shapes used 0–1
+        // floats. Defensive only — current backend always emits
+        // `scores` on `/complete`.
+        let scores = verification.scores
+        let livenessScore: Int
+        let faceScore: Int
+        let docScore: Int
+        if let scores = scores {
+            livenessScore = Int(scores.liveness)
+            faceScore = Int(scores.faceMatch)
+            // `documentAuth` on `VerificationScores` is the same
+            // semantic value as `documentVerification.authenticityScore`
+            // (the latter is `documentAuth / 100.0` on the wire). We
+            // use the typed-scores field here for consistency with
+            // the other two.
+            docScore = Int(scores.documentAuth)
+        } else {
+            livenessScore = Int((verification.livenessVerification?.livenessScore ?? 0) * 100)
+            faceScore = Int((verification.faceVerification?.matchScore ?? 0) * 100)
+            docScore = Int((verification.documentVerification?.authenticityScore ?? 0) * 100)
+        }
         let nameScore = faceScore > 0 ? min(faceScore + 10, 100) : 0
         let overall = verification.riskScore ?? ((livenessScore + nameScore + docScore + faceScore) / 4)
 

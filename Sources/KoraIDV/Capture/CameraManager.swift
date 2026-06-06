@@ -37,6 +37,17 @@ final class CameraManager: NSObject {
     private var currentDevice: AVCaptureDevice?
     private var currentPosition: CameraPosition = .back
 
+    /// When true, captured photos are additionally cropped to a centered
+    /// ID-1 aspect (1.586:1) horizontal card after orientation normalization.
+    /// Set by `DocumentCaptureView` before triggering capture so the review
+    /// screen sees the document filling the frame rather than a tiny card
+    /// inside a 1080×1920 portrait expanse of background. Selfie/liveness
+    /// flows leave this `false` so the full portrait selfie isn't cropped
+    /// down to a horizontal slice. Mirrors Android's
+    /// `DocumentScanner.cropToDocument` which serves the same purpose on
+    /// `Bitmap` outputs from CameraX. v1.9.0-rc5.
+    var documentMode: Bool = false
+
     private let sessionQueue = DispatchQueue(label: "com.koraidv.camera.session")
     private let videoOutputQueue = DispatchQueue(label: "com.koraidv.camera.video")
 
@@ -295,8 +306,33 @@ extension CameraManager: AVCapturePhotoCaptureDelegate {
         // the captured photo matches what the user saw in the viewfinder.
         // Now that the input is reliably upright (Step 1), the existing
         // crop logic produces the expected vertical-strip result.
-        let croppedData = cropToVideoAspect(portraitData) ?? portraitData
-        delegate?.cameraManager(self, didCapturePhoto: croppedData)
+        let aspectCropped = cropToVideoAspect(portraitData) ?? portraitData
+
+        // **v1.9.0-rc5 — Step 3 (document captures only).** When
+        // `documentMode` is set (by DocumentCaptureView before triggering
+        // capture), additionally crop to a centered ID-1 aspect
+        // (1.586:1) horizontal card. Without this, Stratum Remit 2026-06-06
+        // rc4 review screen still showed the DL as a small card in the
+        // middle of a 1080×1920 portrait frame (~70% wood-grain background)
+        // — even though orientation was correct, the captured photo just
+        // included too much of what the camera saw. Server confirmed
+        // `document_completeness: 60/100` and rejected for "Document
+        // quality too low." Mirrors Android's `cropToDocument` choice
+        // (`koraidv-android/.../DocumentScanner.kt:260`) of a centered
+        // aspect crop over a tight-to-bbox crop — Android explicitly
+        // rejected the latter because "analysis stream and capture stream
+        // can arrive in different orientations." iOS doesn't have that
+        // exact issue post-normalizeToPortrait, but the centered approach
+        // is simpler, doesn't depend on plumbing DocumentScanner's bbox
+        // through to here, and handles the common case (user centers the
+        // doc in the viewfinder).
+        let finalData: Data
+        if documentMode {
+            finalData = cropToDocument(aspectCropped) ?? aspectCropped
+        } else {
+            finalData = aspectCropped
+        }
+        delegate?.cameraManager(self, didCapturePhoto: finalData)
     }
 
     /// Normalize a captured photo's JPEG data to upright portrait,
@@ -423,6 +459,69 @@ extension CameraManager: AVCapturePhotoCaptureDelegate {
         }
 
         return cropped.jpegData(compressionQuality: 0.9)
+    }
+
+    /// Crop a captured photo to a centered ID-1 aspect (1.586:1)
+    /// horizontal card region, sized to ~95% of the shorter dimension.
+    ///
+    /// Mirrors Android's `DocumentScanner.cropToDocument` strategy:
+    /// the viewfinder already funnels the user toward a centered,
+    /// horizontally-oriented ID-1 document, so a centered aspect crop
+    /// at the standard ID card ratio reliably frames the card without
+    /// needing to plumb the live-detection bbox through to the photo
+    /// capture path. Android chose this over a tight-to-bbox crop
+    /// because their analysis stream and capture stream can arrive in
+    /// different orientations on CameraX — iOS doesn't have that exact
+    /// hazard after `normalizeToPortrait` runs, but the centered
+    /// approach is simpler, more robust to detection noise, and
+    /// matches Android's behavior for cross-platform parity.
+    ///
+    /// Returns nil if the JPEG can't be decoded; caller falls back to
+    /// the input data.
+    ///
+    /// v1.9.0-rc5.
+    private func cropToDocument(_ data: Data) -> Data? {
+        guard let originalImage = UIImage(data: data) else { return nil }
+
+        let imageSize = originalImage.size
+        guard imageSize.width > 0, imageSize.height > 0 else { return nil }
+
+        // Standard ID-1 ratio (driver's licenses, national ID cards,
+        // passport biopage, credit cards). 85.60mm × 53.98mm = 1.586.
+        let targetAspect: CGFloat = 1.586
+
+        // Size the crop to ~95% of the dominant dimension. For a
+        // portrait-oriented input (the post-normalizeToPortrait case):
+        // width is the shorter edge → targetWidth = width * 0.95,
+        // targetHeight = targetWidth / aspect. For a landscape input
+        // (unlikely after normalizeToPortrait, kept for robustness):
+        // height is the shorter edge → targetHeight = height * 0.95,
+        // targetWidth = targetHeight * aspect.
+        let isPortrait = imageSize.height >= imageSize.width
+        let cropSize: CGSize
+        if isPortrait {
+            let targetW = imageSize.width * 0.95
+            let targetH = min(targetW / targetAspect, imageSize.height)
+            cropSize = CGSize(width: targetW, height: targetH)
+        } else {
+            let targetH = imageSize.height * 0.95
+            let targetW = min(targetH * targetAspect, imageSize.width)
+            cropSize = CGSize(width: targetW, height: targetH)
+        }
+
+        let cropOrigin = CGPoint(
+            x: (imageSize.width - cropSize.width) / 2,
+            y: (imageSize.height - cropSize.height) / 2
+        )
+
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = originalImage.scale
+        let renderer = UIGraphicsImageRenderer(size: cropSize, format: format)
+        let cropped = renderer.image { _ in
+            originalImage.draw(at: CGPoint(x: -cropOrigin.x, y: -cropOrigin.y))
+        }
+
+        return cropped.jpegData(compressionQuality: 0.92)
     }
 }
 

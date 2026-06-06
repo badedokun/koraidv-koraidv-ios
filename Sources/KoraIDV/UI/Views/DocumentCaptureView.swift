@@ -373,7 +373,17 @@ class DocumentCaptureViewModel: ObservableObject {
     @Published var isProcessing = false
     @Published var isFlashOn = false
 
-    let cameraManager = CameraManager()
+    let cameraManager: CameraManager = {
+        let m = CameraManager()
+        // v1.9.0-rc5: tell CameraManager to apply the ID-1 centered
+        // crop (1.586:1 horizontal card) on top of orientation
+        // normalization and aspect crop. Without this the captured
+        // photo includes the full portrait viewfinder area and the
+        // DL appears as a small card in a sea of background; with
+        // it the photo is card-shaped and fills the review viewport.
+        m.documentMode = true
+        return m
+    }()
     private let documentScanner = DocumentScanner()
     private let qualityValidator = QualityValidator()
 

@@ -33,6 +33,20 @@ Pod::Spec.new do |s|
     VerificationScores.screening field made optional and renamed via CodingKey
     to map backend's `complianceScore` — fixes the "Failed to parse response"
     decode error on /complete responses.
+
+    v1.9.0-rc5: addresses Stratum Remit 2026-06-06 rc4 device test —
+    (1) cropToDocument port: CameraManager now applies a centered ID-1
+    aspect (1.586:1) crop on top of orientation normalization when
+    DocumentCaptureView's documentMode flag is set. Fixes "DL too small
+    in review screen" and unblocks document_completeness score
+    (rc4 was 60/100, blocked at "Document quality too low"). Mirrors
+    Android DocumentScanner.cropToDocument.
+    (2) Selfie Match display: result screen was showing "7,893%" because
+    ScoreBreakdown.compute multiplied the already-percentage faceMatch
+    field by 100. Switched to reading from VerificationScores (typed
+    0-100 source) for liveness/face/doc metrics consistently.
+    Liveness challenge orchestration deferred to rc6 (separate UX-decision
+    scope — fail-session vs retry vs continue).
   DESC
 
   s.homepage         = 'https://github.com/badedokun/koraidv-koraidv-ios'
