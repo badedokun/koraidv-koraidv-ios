@@ -62,6 +62,13 @@ final class VerificationFlowController {
     /// compute the remaining dwell time before showing the result.
     private var processingShownAt: Date?
 
+    /// **v1.9.0-rc6.5** — guard so `pushProcessingScreenIfNeeded()` only
+    /// pushes once even when called from both `onAllChallengesReported`
+    /// (liveness path) and `completeVerification` (no-liveness selfie
+    /// path). Without the guard the no-liveness path would push twice
+    /// in some scenarios.
+    private var processingScreenPushed = false
+
     // MARK: - Initialization
 
     init(
@@ -524,7 +531,20 @@ final class VerificationFlowController {
     /// `awaitingChallengesBeforeComplete` flag (last challenge POST
     /// still in flight; the per-POST completion handler will fire
     /// completeVerification when it lands).
+    ///
+    /// **v1.9.0-rc6.5** — also pushes the ProcessingScreen IMMEDIATELY
+    /// here, before any waiting on challenge POSTs or /complete.
+    /// Stratum Remit 2026-06-06 rc6.4 feedback: "the last challenge
+    /// still lags for several seconds after the completion before
+    /// showing the processing page." Root cause: rc6.4 only pushed
+    /// the screen inside `completeVerification()`, which the deferred
+    /// path could delay by 2+ seconds while the final challenge POST
+    /// roundtripped. User stared at the liveness UI through that
+    /// window. Now the transition is immediate at gesture-end; the
+    /// /complete latency overlaps with the 1.5s min-dwell timer.
     private func onAllChallengesReported() {
+        pushProcessingScreenIfNeeded()
+
         if pendingChallengeSubmissions == 0 {
             completeVerification()
         } else {
@@ -533,21 +553,35 @@ final class VerificationFlowController {
         }
     }
 
-    private func completeVerification() {
+    /// **v1.9.0-rc6.5** — push the ProcessingScreen onto the nav stack
+    /// the first time we need it, then record `processingShownAt` so
+    /// the min-dwell timer can fire from this moment. Idempotent —
+    /// subsequent calls are no-ops because `processingScreenPushed`
+    /// stays true for the remainder of the flow.
+    private func pushProcessingScreenIfNeeded() {
+        guard !processingScreenPushed else { return }
+        processingScreenPushed = true
         currentStep = .completing
 
-        // Show processing screen
         let processingView = ProcessingScreen(steps: [
             ProcessingStepItem(label: "Document analyzed", status: .done),
             ProcessingStepItem(label: "Checking face match", status: .active),
             ProcessingStepItem(label: "Finalizing results", status: .pending),
         ])
         pushView(processingView)
-        // **v1.9.0-rc6.4** — record when the ProcessingScreen became
-        // visible so the success path can hold the result transition
-        // for the remaining `processingMinDwell` window if /complete
-        // returns very quickly.
         processingShownAt = Date()
+    }
+
+    private func completeVerification() {
+        // **v1.9.0-rc6.5** — ProcessingScreen push moved to
+        // `pushProcessingScreenIfNeeded()`, which is also called from
+        // `onAllChallengesReported()` earlier in the flow so the
+        // liveness-to-processing transition is immediate at gesture-
+        // end (Stratum 2026-06-06 rc6.4 fix). For the no-liveness
+        // selfie path, this is the first call and the screen is
+        // pushed here. For the liveness path, it's a no-op because
+        // the screen was already pushed seconds earlier.
+        pushProcessingScreenIfNeeded()
 
         sessionManager.completeVerification(verificationId: verification.id) { [weak self] result in
             DispatchQueue.main.async {

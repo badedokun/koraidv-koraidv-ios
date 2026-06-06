@@ -133,6 +133,18 @@ Pod::Spec.new do |s|
     all challenge POSTs are confirmed. Establishes solid US DL
     baseline before cross-document testing (NG passport,
     US passport, mismatch cases, etc.).
+
+    v1.9.0-rc6.5: immediate liveness-to-processing transition. rc6.4
+    deferred the ProcessingScreen push until /complete was called,
+    which on the liveness path waited for the last challenge POST
+    roundtrip (~2s). Stratum 2026-06-06 rc6.4: "the last challenge
+    still lags for several seconds after the completion before
+    showing the processing page." Fix: push ProcessingScreen on
+    LivenessView's onAllComplete (gesture-end), not on /complete-call.
+    The 1.5s min-dwell timer now overlaps with /complete latency
+    instead of starting after it, so the total perceived flow is
+    faster while the processing animation stays visible long enough
+    to register.
   DESC
 
   s.homepage         = 'https://github.com/badedokun/koraidv-koraidv-ios'
