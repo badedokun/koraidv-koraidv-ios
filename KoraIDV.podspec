@@ -25,6 +25,14 @@ Pod::Spec.new do |s|
     from rc2: autoclosure compile error in KoraIDV.log resolved, Logger
     level promoted from .debug to .info so TestFlight QA sees output.
     KoraIDV.version constant bumped (rc2 still reported 1.8.3 to backend).
+
+    v1.9.0-rc4: photo capture orientation normalization (AVCapturePhotoOutput
+    was delivering sensor-native landscape JPEGs even with .portrait connection
+    orientation — selfie and document images uploaded sideways, scoring
+    face_match=0 and liveness=0, auto-rejecting every verification).
+    VerificationScores.screening field made optional and renamed via CodingKey
+    to map backend's `complianceScore` — fixes the "Failed to parse response"
+    decode error on /complete responses.
   DESC
 
   s.homepage         = 'https://github.com/badedokun/koraidv-koraidv-ios'

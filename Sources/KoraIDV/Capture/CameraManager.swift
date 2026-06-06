@@ -267,17 +267,109 @@ extension CameraManager: AVCapturePhotoCaptureDelegate {
             return
         }
 
-        // v1.8.6-rc3: crop the captured photo to match the video preview's
-        // aspect ratio (9:16 portrait under sessionPreset.high). Without
-        // this, the photo output captures at full sensor (typically 4:3),
-        // which includes MORE content above and below than the user saw in
-        // the 9:16 preview — a document that filled 35% of the preview
-        // would only fill ~20% of the captured photo. Stratum Remit's
-        // 2026-06-03 reproduction caught this as "DL appears tiny in
-        // review screen" (Bug 2 screenshot 114). Aligning aspects makes
-        // what-you-saw-in-preview = what-was-captured.
-        let croppedData = cropToVideoAspect(imageData) ?? imageData
+        // **v1.9.0-rc4 — photo orientation normalization (Step 1).**
+        // Stratum Remit's 2026-06-06 device test confirmed AVFoundation
+        // delivers landscape-sensor-native JPEGs (1920x1080 with no EXIF
+        // rotation tag) on iPhone 13 Pro even though we set
+        // `connection.videoOrientation = .portrait` on `capturePhoto()`.
+        // Result on the server: document_front.jpg, document_back.jpg
+        // and selfie.jpg all 1920x1080 landscape with documents/faces
+        // lying on their side — `document_completeness: 30/100`,
+        // `face_match: 0`, `liveness: 0`, auto-reject. Meanwhile the
+        // video output's portrait rotation works fine (liveness frames
+        // were correctly 1080x1920) — so the bug is specific to the
+        // still-photo path.
+        //
+        // Workaround: normalize the captured photo to upright portrait
+        // *before* the aspect-crop step. Two cases to handle:
+        // (a) AVFoundation set EXIF orientation but the buffer is still
+        //     sensor-native — UIImage decodes it correctly but downstream
+        //     ML services that don't read EXIF see it sideways
+        // (b) AVFoundation set neither rotation nor EXIF (what we
+        //     observed on iPhone 13 Pro) — image is landscape, nothing
+        //     downstream knows to rotate
+        // Single redraw at .up handles both.
+        let portraitData = normalizeToPortrait(imageData) ?? imageData
+
+        // Step 2 (existing v1.8.6-rc3): crop to 9:16 portrait aspect so
+        // the captured photo matches what the user saw in the viewfinder.
+        // Now that the input is reliably upright (Step 1), the existing
+        // crop logic produces the expected vertical-strip result.
+        let croppedData = cropToVideoAspect(portraitData) ?? portraitData
         delegate?.cameraManager(self, didCapturePhoto: croppedData)
+    }
+
+    /// Normalize a captured photo's JPEG data to upright portrait,
+    /// flattening any EXIF orientation tag into the actual pixel layout.
+    ///
+    /// `AVCapturePhotoOutput` on iPhone 13 Pro (iOS 26.4) was observed
+    /// to return 1920×1080 sensor-native landscape JPEGs with no EXIF
+    /// orientation tag, even with `connection.videoOrientation = .portrait`
+    /// set on the photo connection just before capture. This breaks every
+    /// downstream consumer that assumes upright pixels — face detection,
+    /// OCR, document-quality scoring, PDF417 decode.
+    ///
+    /// The fix is platform-defensive: re-render the UIImage at its
+    /// display-coordinate `.up` orientation, then explicitly rotate if
+    /// the bytes are still landscape afterward. Returns nil only if the
+    /// JPEG can't be decoded; caller falls back to original data.
+    ///
+    /// - Parameter data: JPEG/HEIF data from `AVCapturePhoto.fileDataRepresentation()`.
+    /// - Returns: JPEG data with pixels in upright portrait orientation,
+    ///   or nil if decode failed.
+    private func normalizeToPortrait(_ data: Data) -> Data? {
+        guard let original = UIImage(data: data) else { return nil }
+
+        // Step A: flatten EXIF orientation. If the source image has any
+        // non-`.up` `imageOrientation`, draw it into a fresh context so
+        // the output bytes match the displayed pixels (and any consumer
+        // that ignores EXIF — most ML services do — sees the upright
+        // result). No-op when `imageOrientation == .up`, but cheap to
+        // run unconditionally for clarity.
+        let flattened: UIImage
+        if original.imageOrientation == .up {
+            flattened = original
+        } else {
+            let format = UIGraphicsImageRendererFormat.default()
+            format.scale = original.scale
+            let renderer = UIGraphicsImageRenderer(size: original.size, format: format)
+            flattened = renderer.image { _ in
+                original.draw(in: CGRect(origin: .zero, size: original.size))
+            }
+        }
+
+        // Step B: if the flattened result is landscape (sensor-native
+        // without EXIF rotation), rotate to portrait. Back-facing
+        // camera in portrait device orientation: rotate 90° clockwise
+        // (UIImage.Orientation.right). Front camera: rotate 90°
+        // counter-clockwise (UIImage.Orientation.left) — the camera
+        // input already has `isVideoMirrored = true` for front capture
+        // (see capturePhoto), so the resulting pixels mirror correctly
+        // after rotation.
+        if flattened.size.width <= flattened.size.height {
+            // Already portrait (or square) — done.
+            return flattened.jpegData(compressionQuality: 0.92)
+        }
+        guard let cgImage = flattened.cgImage else {
+            // Drawing-based rotation requires cgImage; fall back to
+            // the flattened landscape JPEG so caller still gets *some*
+            // data rather than nil.
+            return flattened.jpegData(compressionQuality: 0.92)
+        }
+        let rotationOrientation: UIImage.Orientation = currentPosition == .front ? .left : .right
+        let rotated = UIImage(cgImage: cgImage, scale: flattened.scale, orientation: rotationOrientation)
+
+        // Re-flatten the rotated image so the JPEG bytes have the
+        // rotation baked in (not just an EXIF tag). Downstream ML
+        // services that read pixel buffers directly will see upright
+        // portrait.
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = rotated.scale
+        let renderer = UIGraphicsImageRenderer(size: rotated.size, format: format)
+        let upright = renderer.image { _ in
+            rotated.draw(in: CGRect(origin: .zero, size: rotated.size))
+        }
+        return upright.jpegData(compressionQuality: 0.92)
     }
 
     /// Crops the captured photo to match the video preview's aspect ratio

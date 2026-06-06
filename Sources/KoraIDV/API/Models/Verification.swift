@@ -93,7 +93,35 @@ public struct ChallengeResult: Codable {
     public let confidence: Double
 }
 
-/// Backend verification scores (0-100 scale)
+/// Backend verification scores (0-100 scale).
+///
+/// **v1.9.0-rc4 fix.** rc3 declared `screening: Double` as required, but
+/// the backend `/complete` response never returns a field by that name —
+/// the wire field is `complianceScore` (and it's `omitempty`, so it's
+/// often absent entirely). Net result: every rc3 `/complete` response
+/// that contained a non-nil `scores` object failed to decode with
+/// `keyNotFound("screening")`, which surfaces to the host as
+/// "Failed to parse response: The data couldn't be read because it is
+/// missing" — the symptom Stratum Remit reported on 2026-06-06 after
+/// the rc3 device test.
+///
+/// Two changes here:
+///
+/// 1. `screening` → `Double?`. Allows decode to succeed when the
+///    backend omits `complianceScore` (the most common case — most
+///    verifications don't go through compliance screening).
+///
+/// 2. `CodingKeys` maps `screening` ← `complianceScore`. Matches the
+///    Android SDK's wire-DTO/domain projection at
+///    `koraidv-android/.../SessionManager.kt:547`
+///    (`screening = it.complianceScore ?: 0.0`). Same consumer-facing
+///    field name across platforms; same wire contract; no API break.
+///
+/// The other fields stay required because the backend always returns
+/// them (documentQuality, documentAuth, faceMatch, liveness, nameMatch,
+/// dataConsistency, overall are all non-omitempty `float64` in
+/// `models.VerificationScores`). Defensive optional-everywhere would
+/// be safer but is a public-API change — defer to v1.10.
 public struct VerificationScores: Codable {
     public let documentQuality: Double
     public let documentAuth: Double
@@ -101,8 +129,19 @@ public struct VerificationScores: Codable {
     public let liveness: Double
     public let nameMatch: Double
     public let dataConsistency: Double
-    public let screening: Double
+    public let screening: Double?
     public let overall: Double
+
+    enum CodingKeys: String, CodingKey {
+        case documentQuality
+        case documentAuth
+        case faceMatch
+        case liveness
+        case nameMatch
+        case dataConsistency
+        case screening = "complianceScore"
+        case overall
+    }
 }
 
 /// Risk signal
