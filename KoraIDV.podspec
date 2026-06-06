@@ -109,6 +109,18 @@ Pod::Spec.new do |s|
     settle delay: 1.5s minimum from camera-start before auto-capture
     fires, so user can frame the document. Was firing immediately
     when detector saw the document mid-reach.
+
+    v1.9.0-rc6.3: stuck-on-Processing-screen fix. rc6.2 added the
+    `.verified` enum case but missed the two downstream switches that
+    branch on verification.status — VerificationFlowController.showResult
+    only had `.approved` (auto-approve fell to default → ResultView
+    pushed), AND ResultView.body's switch ALSO only had `.approved` so
+    `.verified` fell to ITS default which renders an infinite
+    ProcessingScreen. Stratum Remit 2026-06-06 verification 7f52999f
+    auto-approved on server (final_score in passing range) but UI hung
+    on Processing for 1+ minute. Added `.verified` to both switches
+    paired with `.approved` so both wire strings route to the
+    SuccessScreen.
   DESC
 
   s.homepage         = 'https://github.com/badedokun/koraidv-koraidv-ios'

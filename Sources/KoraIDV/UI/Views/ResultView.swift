@@ -98,7 +98,18 @@ struct ProcessingScreen: View {
 
             Spacer()
         }
-        .background(KoraColors.DarkBg)
+        // **v1.9.0-rc6.3 — fill the screen.** Previously the VStack
+        // sized to its content (rings + text + steps) and `.background`
+        // painted only that area, leaving the parent navigation
+        // controller's empty space visible on the sides and top/bottom
+        // (Stratum Remit 2026-06-06: "the ui looks awkward... dark
+        // band in the middle, empty on the sides"). `.frame(maxWidth/
+        // maxHeight: .infinity)` makes the VStack expand to fill its
+        // parent so `.background` paints edge-to-edge. `.ignoresSafeArea`
+        // extends the dark color into the safe-area insets (status bar
+        // and home indicator) for a true full-screen look.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(KoraColors.DarkBg.ignoresSafeArea())
     }
 }
 
@@ -788,7 +799,16 @@ struct ResultView: View {
 
     var body: some View {
         switch verification.status {
-        case .approved:
+        // **v1.9.0-rc6.3** — `.verified` is the backend's wire string
+        // for auto-approve (added in rc6.2 to VerificationStatus enum).
+        // Without this case, the switch fell into the `default` branch
+        // and rendered ProcessingScreen forever — Stratum Remit's
+        // 2026-06-06 rc6.2 test was stuck on "Verifying your identity /
+        // Processing verification" 1+ minute after `/complete` returned
+        // 200 with the approved verification. Same route as `.approved`:
+        // show the SuccessScreen. Legacy `.approved` retained for older
+        // backends.
+        case .verified, .approved:
             SuccessScreen(verification: verification, onDone: onDone)
         case .rejected:
             RejectedScreen(verification: verification, onRetry: onDone)

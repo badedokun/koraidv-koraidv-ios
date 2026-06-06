@@ -493,8 +493,16 @@ final class VerificationFlowController {
         // Route to appropriate result screen based on status. In simplified
         // mode (REQ-005) we show only Success / Failed / Review without any
         // scores or technical metrics.
+        //
+        // **v1.9.0-rc6.3** — `.verified` is the koraidv-identity wire
+        // string for auto-approve; `.approved` is the legacy alias. Both
+        // route to SuccessScreen (or SimplifiedSuccessScreen). Without
+        // the `.verified` case here, an auto-approved verification fell
+        // into the `default` branch below, which pushes the generic
+        // ResultView — whose body switch ALSO lacked `.verified` and
+        // rendered an infinite ProcessingScreen. User stuck.
         switch verification.status {
-        case .approved:
+        case .verified, .approved:
             if simplified {
                 pushView(SimplifiedSuccessScreen(messages: messages) { [weak self] in
                     self?.finish(with: .success(verification))
