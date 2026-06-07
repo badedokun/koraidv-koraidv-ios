@@ -145,6 +145,19 @@ Pod::Spec.new do |s|
     instead of starting after it, so the total perceived flow is
     faster while the processing animation stays visible long enough
     to register.
+
+    v1.9.0-rc6.6: smile-challenge detection sticky-fix. iOS uses a
+    landmark mouth-aspect heuristic (Apple Vision has no
+    smilingProbability) and was reassigning smileDetected every frame
+    instead of latching it true once observed (turn/nod use the
+    latched pattern). Result: smile flickered below threshold during
+    natural mouth movement, the 5-consecutive-frame counter never
+    accumulated, smile challenges took 30+s to register. Stratum
+    2026-06-06 rc6.5 device test: "when smile challenge is #3, the
+    transition to processing is delayed." Not position-specific —
+    happens whenever smile is the challenge. Fix: once ratio crosses
+    threshold, set smileDetected = true and keep it true until
+    reset() (next challenge). Matches turn/nod pattern.
   DESC
 
   s.homepage         = 'https://github.com/badedokun/koraidv-koraidv-ios'

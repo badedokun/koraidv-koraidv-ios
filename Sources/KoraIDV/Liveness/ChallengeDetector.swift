@@ -167,13 +167,42 @@ final class ChallengeDetector {
     // MARK: - Smile Detection
 
     private func detectSmile(face: DetectedFace) -> Bool {
+        // **v1.9.0-rc6.6 — sticky smile + lower threshold.** Apple
+        // Vision doesn't expose a `smilingProbability` like Android's
+        // ML Kit, so iOS uses a landmark-based mouth-aspect ratio
+        // heuristic. Two issues with the prior implementation:
+        //
+        // 1. `smileDetected` was reassigned every frame (`=` instead of
+        //    `||=`). Mouth shape fluctuates during a smile — lips
+        //    spread, teeth show/hide, jaw moves — so the ratio dips
+        //    below threshold momentarily and `smileDetected` flips
+        //    back to false. Compare to `nodDetected` / `turnDetected`
+        //    which stay true once the gesture is observed (sticky).
+        //
+        // 2. The outer `requiredConsecutiveDetections = 5` requires
+        //    five consecutive frames at ratio > threshold. A natural
+        //    100ms smile is ~3 frames at 30fps — never enough.
+        //
+        // Stratum Remit 2026-06-06 rc6.5: "when smile challenge is #3,
+        // the transition to processing is delayed." Not position-
+        // specific — happens whenever smile is the challenge.
+        //
+        // Fix: once ratio crosses threshold, set `smileDetected = true`
+        // and *keep it true* for the remainder of this challenge
+        // (sticky). This matches the turn/nod pattern. Reset happens
+        // in `reset()` when the next challenge starts. Result: as soon
+        // as the user smiles enough to cross threshold once, return
+        // true for every subsequent frame, so the 5-frame consecutive
+        // counter ramps up quickly even if the mouth shape fluctuates.
+        //
+        // Threshold itself unchanged (`smileThreshold = 0.35`, so
+        // ratio > 2.35) — this was already tuned reasonably; the
+        // problem was the resetting behavior, not the trigger level.
         guard let landmarks = face.landmarks else { return false }
 
-        // Calculate mouth aspect ratio
         let mouth = landmarks.mouth
         guard mouth.count >= 8 else { return false }
 
-        // Approximate smile by measuring mouth width vs height
         let width = distance(mouth[0], mouth[4])
         let height = distance(mouth[2], mouth[6])
 
@@ -181,8 +210,10 @@ final class ChallengeDetector {
 
         let ratio = Float(width / height)
 
-        // A smile typically has a higher width-to-height ratio
-        smileDetected = ratio > (2.0 + smileThreshold)
+        if ratio > (2.0 + smileThreshold) {
+            smileDetected = true
+        }
+        // Sticky — once true, stays true until `reset()` (next challenge).
 
         return smileDetected
     }
