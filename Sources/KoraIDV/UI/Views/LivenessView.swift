@@ -107,7 +107,29 @@ struct LivenessView: View {
                             .offset(y: -130)
                             .accessibilityLabel("Starting in \(viewModel.countdown)")
                     }
+
+                    // **v1.9.0-rc6.7** — challenge-complete checkmark
+                    // overlay. Renders briefly (~0.6s) when a challenge
+                    // completes with valid imageData, paired with a
+                    // medium haptic in the view model. Lets the user
+                    // know the gesture registered before the next
+                    // challenge prompt arrives, eliminating the
+                    // "looking up when next countdown is at 1"
+                    // confusion Stratum reported 2026-06-07.
+                    if viewModel.showChallengeCompleteCheck {
+                        ZStack {
+                            Circle()
+                                .fill(Color.green.opacity(0.85))
+                                .frame(width: 100, height: 100)
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 50, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                        .transition(.scale.combined(with: .opacity))
+                        .accessibilityLabel("Challenge completed")
+                    }
                 }
+                .animation(.easeInOut(duration: 0.2), value: viewModel.showChallengeCompleteCheck)
 
                 Spacer().frame(height: 24)
 
@@ -189,6 +211,13 @@ class LivenessViewModel: ObservableObject {
     /// flip true before starting; this flag prevents re-arming if face
     /// briefly drops and reappears.
     private var countdownStartedForCurrentChallenge = false
+
+    /// **v1.9.0-rc6.7** — shows the green-checkmark overlay briefly
+    /// (~0.6s) between challenges. Set true in
+    /// `didCompleteChallenge` with valid imageData; auto-cleared by
+    /// the timer in the same callback. The LivenessView body binds
+    /// to this and renders an overlay above the oval when true.
+    @Published var showChallengeCompleteCheck: Bool = false
 
     init(session: LivenessSession) {
         self.session = session
@@ -287,6 +316,26 @@ extension LivenessViewModel: LivenessManagerDelegate {
     }
 
     func livenessManager(_ manager: LivenessManager, didCompleteChallenge challenge: LivenessChallenge, passed: Bool, imageData: Data?) {
+        // **v1.9.0-rc6.7** — haptic + visual signal so the user knows a
+        // challenge completed before the next prompt appears. Stratum
+        // Remit 2026-06-07: "in some case you are asked to look up and
+        // by the time you turn your head back the next challenge has
+        // begun and the count down is at 1." Haptic fires regardless
+        // of pass/fail (the user did SOMETHING — they should know it
+        // registered). Visual checkmark is set on the view model and
+        // auto-dismissed after 0.6s by the SwiftUI animation in the
+        // body. Only fires when there's real imageData so the
+        // nil-suppression path (rc3 guard) doesn't trigger spurious
+        // feedback for invisible-to-user events.
+        if let imageData = imageData, !imageData.isEmpty {
+            DispatchQueue.main.async {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                self.showChallengeCompleteCheck = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+                    self?.showChallengeCompleteCheck = false
+                }
+            }
+        }
         // **v1.9.0-rc3 — stop the silent empty-imageBase64 submission.**
         // rc2 (and earlier) used `imageData ?? Data()` here, so when
         // the SDK's capture path produced nil (anti-spoof reject,

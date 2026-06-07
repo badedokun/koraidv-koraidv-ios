@@ -83,8 +83,17 @@ final class DocumentScanner {
     /// prevent the 3-second force-capture deadline from elapsing.
     private let noDetectionThreshold = 3
 
-    /// 1 stable frame triggers ready-to-capture. Matches Android.
-    private let stabilityThreshold = 1
+    /// **v1.9.0-rc6.7** — raised from 1 to 3 consecutive stable frames.
+    /// Stratum Remit 2026-06-07 cross-doc test: passport capture fired
+    /// before the document was fully framed because a single stable
+    /// frame was enough to satisfy the trigger. With 3 consecutive
+    /// stable frames (~100ms at 30fps), the user has to actually
+    /// settle the document into position rather than just briefly
+    /// passing through a stable detection. Android still uses 1
+    /// because its viewfinder + countdown UI gives more pre-capture
+    /// time; iOS doesn't, so a stricter stability requirement
+    /// substitutes for the missing dwell.
+    private let stabilityThreshold = 3
 
     /// 10% relative corner displacement tolerance per axis. Matches
     /// Android. Real-world handheld jitter on a phone moves corners
@@ -264,10 +273,32 @@ final class DocumentScanner {
                     confidence = Float(scaled)
                 }
 
-                // Coverage guidance — caller suppresses auto-capture
-                // when non-nil.
+                // Coverage + edge guidance — caller suppresses
+                // auto-capture when non-nil.
+                //
+                // **v1.9.0-rc6.7** — added edge-detection guidance.
+                // Stratum Remit 2026-06-07: "when the doc is completely
+                // inside the frame, the message still says move closer
+                // to the doc, which is the point the camera was
+                // supposed to snap." Root cause: coverage is text-bbox
+                // area / frame area. A document can be fully framed
+                // but have small text relative to the frame (passport
+                // biopage, DL back) so coverage stays below threshold,
+                // pushing the user to "move closer" — which then makes
+                // them clip the edges. Edge-touch is a separate signal:
+                // if the text bbox touches a frame edge (within 2%
+                // margin), the document extends past that edge —
+                // user should pull back, not push closer. This breaks
+                // the loop.
+                let edgePad: CGFloat = max(width, height) * 0.02
+                let touchesEdge = rawMinX < edgePad ||
+                                  rawMinY < edgePad ||
+                                  rawMaxX > (width - edgePad) ||
+                                  rawMaxY > (height - edgePad)
                 let qualityGuidance: String?
-                if coverage < self.minCoverage {
+                if touchesEdge {
+                    qualityGuidance = "Fit the entire document inside the frame"
+                } else if coverage < self.minCoverage {
                     qualityGuidance = "Move closer to the document"
                 } else if coverage > self.maxCoverage {
                     qualityGuidance = "Move further from the document"

@@ -43,6 +43,24 @@ public struct Verification: Codable {
 
     /// Completion timestamp
     public let completedAt: Date?
+
+    /// **v1.9.0-rc6.7** — Customer-facing rejection reason from the
+    /// backend's decision engine. Examples:
+    ///   "You selected Nigeria as the issuing country but the document
+    ///    was issued by United States. Please restart and pick the
+    ///    country shown on your document."
+    ///   "You selected Passport but the document you uploaded looks
+    ///    like a US Driver's License. Please restart and either pick
+    ///    the right document or upload the correct one."
+    /// Backend sends this on every auto_reject (see
+    /// `BuildVerificationAPIResponse` line 435 in identity-service).
+    /// The iOS SDK previously didn't have a field to decode it, so
+    /// the RejectedScreen showed only the generic "couldn't verify"
+    /// message + the score breakdown. Users misread the lowest score
+    /// (often Selfie Match) as the cause when the actual cause was
+    /// a country/document-type selection mismatch unrelated to scoring.
+    /// Surfaced by Stratum Remit 2026-06-07 cross-doc test matrix.
+    public let decisionReason: String?
 }
 
 /// Verification status

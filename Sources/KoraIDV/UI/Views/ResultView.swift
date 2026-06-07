@@ -234,6 +234,27 @@ struct RejectedScreen: View {
                     .foregroundColor(KoraColors.TextSecondary)
                     .padding(.top, 4)
 
+                // **v1.9.0-rc6.7** — Surface the backend's
+                // `decisionReason` prominently. Without this, users hit
+                // by hard-reject rules (country mismatch, doc-type
+                // mismatch, expired-doc backstops) saw only the
+                // generic "couldn't verify" + score breakdown and
+                // misread the lowest-scoring metric as the cause.
+                // Stratum Remit 2026-06-07 cross-doc test: rejection
+                // for "selected NG, scanned US" was actually about
+                // country mismatch but the user saw Selfie Match 57%
+                // and tried to fix lighting. Displaying the backend's
+                // specific reason eliminates that confusion.
+                if let reason = verification.decisionReason, !reason.isEmpty {
+                    Text(reason)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(KoraColors.ErrorRed)
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 12)
+                        .padding(.horizontal, 32)
+                        .accessibilityLabel("Rejection reason: \(reason)")
+                }
+
                 Spacer().frame(height: 24)
 
                 // Score card

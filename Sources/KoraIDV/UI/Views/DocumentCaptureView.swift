@@ -188,14 +188,32 @@ struct DocumentCaptureView: View {
             Spacer()
 
             // Review card
+            //
+            // **v1.9.0-rc6.7** — image scaled to use available area
+            // instead of hardcoded 300×200. Stratum Remit 2026-06-07:
+            // "we need to fill the frame box in review. as you can
+            // see in the image, there are spaces around that we can
+            // fill to enlarge the view." Prior frame was tiny
+            // relative to the iPhone screen, leaving lots of black
+            // padding. New frame fills 92% of screen width and up to
+            // 40% of screen height while preserving aspect ratio via
+            // `.aspectRatio(contentMode: .fit)`. The image stays
+            // proportional so a horizontal ID card displays wide and
+            // short, while a portrait passport biopage displays tall
+            // and narrow — both filling their dimension.
             VStack(spacing: 16) {
                 if let uiImage = UIImage(data: imageData) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: 300, maxHeight: 200)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .accessibilityLabel("Captured document photo")
+                    GeometryReader { geo in
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: geo.size.width, height: geo.size.height)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .accessibilityLabel("Captured document photo")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: UIScreen.main.bounds.height * 0.40)
+                    .padding(.horizontal, 16)
                 }
 
                 ReviewBadge(text: L10n.tr("koraidv.capture.review.quality"))

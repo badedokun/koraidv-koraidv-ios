@@ -158,6 +158,27 @@ Pod::Spec.new do |s|
     happens whenever smile is the challenge. Fix: once ratio crosses
     threshold, set smileDetected = true and keep it true until
     reset() (next challenge). Matches turn/nod pattern.
+
+    v1.9.0-rc6.7: six fixes from Stratum Remit 2026-06-07 cross-doc
+    test matrix. (1) decisionReason plumbing — backend's specific
+    rejection messages ("You selected NG but document was issued by
+    US") now displayed on RejectedScreen; eliminates user confusion
+    where lowest-scoring metric was misread as the cause.
+    (2) Blink-challenge sticky-fix — lowered opening-state EAR
+    threshold from 1.5× to 1.2× so natural partial-recovery blinks
+    complete the cycle reliably (sibling to rc6.6 smile). (3) Capture
+    edge-detection — new guidance "Fit the entire document inside
+    the frame" when text bbox touches frame edge (within 2% margin);
+    suppresses the bad "move closer when already framed" loop that
+    forced users to over-fill and clip edges. (4) DocumentScanner
+    stability threshold raised 1→3 consecutive frames so capture
+    waits for sustained framing instead of firing on a single brief
+    stable detection. (5) Document review viewport — scaled image
+    from hardcoded 300×200 to fill available real estate (92% width,
+    40% screen height). (6) Challenge-complete haptic + green
+    checkmark overlay between challenges so user knows their gesture
+    registered before the next prompt arrives. iOS version constant
+    bumped to 1.9.0-rc6.7.
   DESC
 
   s.homepage         = 'https://github.com/badedokun/koraidv-koraidv-ios'

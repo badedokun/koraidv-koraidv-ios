@@ -140,7 +140,21 @@ final class ChallengeDetector {
                 blinkState = .opening
             }
         case .opening:
-            if avgEAR > earBlinkThreshold * 1.5 {
+            // **v1.9.0-rc6.7** — lowered open-completion threshold from
+            // `* 1.5` to `* 1.2`. A natural human blink doesn't always
+            // fully return EAR to 1.5× the closed threshold within the
+            // detection window — partial recovery (eyes ~80% open) is
+            // common, especially under indoor lighting where landmark
+            // estimation has more noise. With the prior 1.5× threshold,
+            // the state machine often stuck in .opening and never
+            // declared the blink complete, so even though the user did
+            // blink, the challenge took many seconds (or never
+            // registered) before the consecutive-frames counter
+            // accumulated. Stratum Remit 2026-06-07: "blink lags for
+            // several seconds before it transition." Lower threshold
+            // = more reliable cycle completion. blinkDetected stays
+            // sticky-true once set (same pattern as rc6.6 smile fix).
+            if avgEAR > earBlinkThreshold * 1.2 {
                 blinkState = .open
                 blinkDetected = true
             }
