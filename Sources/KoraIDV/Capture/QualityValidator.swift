@@ -27,6 +27,11 @@ enum QualityIssueType {
     case multipleFaces
     case documentNotDetected
     case documentPartiallyVisible
+    /// **v1.9.1-rc2** — document image appears to be a photo of a screen
+    /// (laptop, phone, monitor) rather than a real physical document.
+    /// Detected by [DocumentSpoofCheck] via edge-density coefficient of
+    /// variation across spatial blocks of the image.
+    case suspectedScreen
 }
 
 /// Quality issue severity
@@ -82,6 +87,12 @@ final class QualityValidator {
 
     /// Maximum dimension for analysis images to prevent OOM on large inputs
     private let maxAnalysisDimension: CGFloat = 480
+
+    /// **v1.9.1-rc2** — client-side document anti-spoof (screen detection).
+    /// Catches the egregious "phone pointed at a laptop screen displaying a
+    /// document" case via edge-density spatial uniformity. Conservative
+    /// thresholds — see [DocumentSpoofCheck] for the algorithm + limits.
+    private let documentSpoofCheck = DocumentSpoofCheck()
 
     // MARK: - Initialization
 
@@ -139,6 +150,20 @@ final class QualityValidator {
                 type: .glare,
                 message: "Glare detected. Adjust angle to reduce reflections.",
                 severity: .warning
+            ))
+        }
+
+        // **v1.9.1-rc2** — document-side anti-spoof: reject images that
+        // appear to be photos of a screen displaying a document rather
+        // than a real physical document. Runs on the full `image` (not
+        // the downsampled analysis image) so the algorithm has enough
+        // pixels to see the subpixel-grid signal it's looking for.
+        let spoofResult = documentSpoofCheck.analyze(image)
+        if spoofResult.isLikelyScreen {
+            issues.append(QualityIssue(
+                type: .suspectedScreen,
+                message: "This looks like a photo of a screen. Please capture the physical document, not an image displayed on another device.",
+                severity: .error
             ))
         }
 
