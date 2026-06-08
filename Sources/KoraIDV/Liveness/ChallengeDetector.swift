@@ -39,9 +39,25 @@ final class ChallengeDetector {
 
     private var initialYaw: Float?
     private var turnDetected = false
+    /// **v1.9.1** — frames waited for the user to settle at neutral before
+    /// the turn baseline is snapshotted. Caps the wait so a user who
+    /// settles slightly-off-neutral doesn't hang the challenge forever.
+    private var turnBaselineWaitFrames = 0
 
     private var initialPitch: Float?
     private var nodDetected = false
+    /// **v1.9.1** — same fallback counter for nod challenges.
+    private var nodBaselineWaitFrames = 0
+
+    /// **v1.9.1** — neutral tolerance for baseline snapshot, in radians.
+    /// 0.087 rad ≈ 5° — comfortable head wobble while sitting still.
+    private let neutralTolerance: Float = 0.087
+
+    /// **v1.9.1** — max frames to wait for the user to settle at neutral
+    /// before falling back to whatever pose they're in. ~30 frames at
+    /// 30 fps = 1 second. Prevents a "user keeps head off-center"
+    /// scenario from blocking detection forever.
+    private let baselineMaxWaitFrames = 30
 
     private var smileDetected = false
 
@@ -150,8 +166,10 @@ final class ChallengeDetector {
         blinkDetected = false
         initialYaw = nil
         turnDetected = false
+        turnBaselineWaitFrames = 0
         initialPitch = nil
         nodDetected = false
+        nodBaselineWaitFrames = 0
         smileDetected = false
         // **v1.9.0-rc6.8** — reset CIDetector-path blink state too,
         // so the next challenge starts fresh.
@@ -353,9 +371,28 @@ final class ChallengeDetector {
 
         let yawFloat = Float(yaw)
 
-        // Initialize baseline
+        // **v1.9.1 — neutral-baseline gating.** Olabode @ BanffPay 2026-06-08
+        // confirmed a wrong-direction-accept bug class on Android (and which
+        // also affects iOS over 5+ sustained frames): when the user pre-
+        // positions during the 3-second countdown, the legacy "first frame =
+        // baseline" snapshot anchored a non-neutral starting yaw, and
+        // returning toward true neutral produced delta past threshold in the
+        // direction OPPOSITE to where the user had pre-turned. The challenge
+        // then passed even though the user never made the requested turn.
+        //
+        // Fix: only snapshot the baseline when the user is within
+        // ±neutralTolerance of true neutral. If they aren't, wait. After
+        // baselineMaxWaitFrames frames (~1s at 30fps) we fall back to
+        // whatever pose they're in so the challenge can still complete for
+        // users who genuinely cannot achieve true neutral.
         if initialYaw == nil {
-            initialYaw = yawFloat
+            if abs(yawFloat) <= neutralTolerance {
+                initialYaw = yawFloat
+            } else if turnBaselineWaitFrames >= baselineMaxWaitFrames {
+                initialYaw = yawFloat
+            } else {
+                turnBaselineWaitFrames += 1
+            }
             return false
         }
 
@@ -394,9 +431,18 @@ final class ChallengeDetector {
             return false
         }
 
-        // Initialize baseline
+        // **v1.9.1 — neutral-baseline gating.** Same fix as detectTurn:
+        // only snapshot the pitch baseline when the user is at neutral
+        // (within ±neutralTolerance). Closes the same wrong-direction-accept
+        // bug class for nod challenges that the turn fix closes for yaw.
         if initialPitch == nil {
-            initialPitch = pitchValue
+            if abs(pitchValue) <= neutralTolerance {
+                initialPitch = pitchValue
+            } else if nodBaselineWaitFrames >= baselineMaxWaitFrames {
+                initialPitch = pitchValue
+            } else {
+                nodBaselineWaitFrames += 1
+            }
             return false
         }
 

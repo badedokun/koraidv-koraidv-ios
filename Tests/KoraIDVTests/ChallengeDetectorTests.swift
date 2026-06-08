@@ -616,4 +616,116 @@ final class ChallengeDetectorTests: XCTestCase {
             XCTAssertFalse(result.completed)
         }
     }
+
+    // MARK: - v1.9.1 — security regression: neutral-baseline gating
+    //
+    // Olabode @ BanffPay 2026-06-08 confirmed on Android that the SDK accepted
+    // wrong-direction motion. Same bug class exists on iOS over 5+ sustained
+    // frames: user pre-positions during countdown → baseline anchors at
+    // offset → returning to neutral produces delta past threshold in the
+    // OPPOSITE direction. iOS v1.9.1 gates baseline snapshot on neutral
+    // (|yaw|/|pitch| <= 0.087 rad ≈ 5°), with a 30-frame fallback so a user
+    // who can't reach true neutral isn't blocked forever.
+
+    func testTurnRightNotCompletedWhenUserTurnsLeftFromNeutralBaseline() {
+        // Baseline at neutral. User turns wrong direction.
+        let neutralFace = makeFace(yaw: 0.0, landmarks: makeLandmarks())
+        _ = detector.process(face: neutralFace, challengeType: .turnRight)
+
+        // For turn_right, positive yaw delta means wrong direction.
+        let turnedLeft = makeFace(yaw: 0.4, landmarks: makeLandmarks())
+        for _ in 0..<10 {
+            let result = detector.process(face: turnedLeft, challengeType: .turnRight)
+            XCTAssertFalse(result.completed)
+        }
+    }
+
+    func testTurnLeftNotCompletedWhenUserTurnsRightFromNeutralBaseline() {
+        let neutralFace = makeFace(yaw: 0.0, landmarks: makeLandmarks())
+        _ = detector.process(face: neutralFace, challengeType: .turnLeft)
+
+        let turnedRight = makeFace(yaw: -0.4, landmarks: makeLandmarks())
+        for _ in 0..<10 {
+            let result = detector.process(face: turnedRight, challengeType: .turnLeft)
+            XCTAssertFalse(result.completed)
+        }
+    }
+
+    func testTurnRightNotCompletedWhenPrePositionedLeftThenReturningToNeutral() {
+        // This is the exact Olabode exploit, ported to iOS.
+        //
+        // Pre-v1.9.1: user holds head LEFT during countdown. First post-
+        // countdown frame snapshots initialYaw at +0.4 (Apple Vision yaw
+        // positive = user turned left). User returns to neutral. Yaw drops
+        // toward 0, delta from baseline goes from 0 → -0.4. For turnRight
+        // (delta < -0.17), several frames at delta = -0.2, -0.3, -0.4 satisfy
+        // the threshold. With 5 consecutive frames the challenge completes —
+        // but the user never actually turned right.
+        //
+        // v1.9.1: the pre-positioned +0.4 yaw is outside the neutral tolerance,
+        // so initialYaw is NOT snapshotted. Detector waits. User returns to
+        // neutral; baseline is then snapshotted at ~0. Subsequent rightward
+        // motion would have to be a real right turn to satisfy the threshold.
+        let prePositionedLeft = makeFace(yaw: 0.4, landmarks: makeLandmarks())
+        // 5 frames of pre-positioned yaw — pre-fix would have snapshotted on
+        // frame 1; post-fix waits for neutral.
+        for _ in 0..<5 {
+            _ = detector.process(face: prePositionedLeft, challengeType: .turnRight)
+        }
+
+        // User returns to neutral over 10 frames.
+        let returnToNeutral = makeFace(yaw: 0.0, landmarks: makeLandmarks())
+        for _ in 0..<10 {
+            let result = detector.process(face: returnToNeutral, challengeType: .turnRight)
+            // Post-fix: baseline gets snapshotted at 0.0 (within tolerance);
+            // subsequent frames also at 0.0 mean delta = 0, not past threshold.
+            XCTAssertFalse(result.completed)
+        }
+    }
+
+    func testNodUpNotCompletedWhenUserNodsDownFromNeutralBaseline() {
+        let neutralFace = makeFace(pitch: 0.0, landmarks: makeLandmarks())
+        _ = detector.process(face: neutralFace, challengeType: .nodUp)
+
+        // For nod_up, negative pitch delta means wrong direction.
+        let noddedDown = makeFace(pitch: -0.3, landmarks: makeLandmarks())
+        for _ in 0..<10 {
+            let result = detector.process(face: noddedDown, challengeType: .nodUp)
+            XCTAssertFalse(result.completed)
+        }
+    }
+
+    func testNodDownNotCompletedWhenUserNodsUpFromNeutralBaseline() {
+        let neutralFace = makeFace(pitch: 0.0, landmarks: makeLandmarks())
+        _ = detector.process(face: neutralFace, challengeType: .nodDown)
+
+        let noddedUp = makeFace(pitch: 0.3, landmarks: makeLandmarks())
+        for _ in 0..<10 {
+            let result = detector.process(face: noddedUp, challengeType: .nodDown)
+            XCTAssertFalse(result.completed)
+        }
+    }
+
+    func testBaselineFallbackAfter30FramesWhenUserCantReachNeutral() {
+        // Some users genuinely can't get to true neutral (e.g. they sit
+        // off-center from the phone). The fallback engages after 30 frames
+        // (~1 second at 30 fps) so the challenge still completes for them.
+        //
+        // Setup: user holds head slightly off-neutral (yaw = 0.2 — outside
+        // the 0.087 tolerance) for 30 frames. Then makes a real right turn
+        // (yaw goes negative past threshold relative to baseline).
+        let offNeutralFace = makeFace(yaw: 0.2, landmarks: makeLandmarks())
+        for _ in 0..<30 {
+            _ = detector.process(face: offNeutralFace, challengeType: .turnRight)
+        }
+
+        // After 30 frames, fallback snapshots initialYaw at 0.2.
+        // Now user turns right: yaw = -0.2, delta = -0.4, satisfies threshold.
+        let realRightTurn = makeFace(yaw: -0.2, landmarks: makeLandmarks())
+        for _ in 0..<5 {
+            _ = detector.process(face: realRightTurn, challengeType: .turnRight)
+        }
+        let result = detector.process(face: realRightTurn, challengeType: .turnRight)
+        XCTAssertTrue(result.completed)
+    }
 }
