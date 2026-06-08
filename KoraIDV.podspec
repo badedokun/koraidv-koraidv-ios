@@ -159,6 +159,29 @@ Pod::Spec.new do |s|
     threshold, set smileDetected = true and keep it true until
     reset() (next challenge). Matches turn/nod pattern.
 
+    v1.9.0 (final): cuts the rc6.8 release candidate. Two-day stabilization
+    arc starting from the v1.9.0 ML Kit rewrite (rc1). Highlights of what
+    landed across the rc series:
+      - Document detection rebuilt on Google ML Kit Text Recognition for
+        cross-platform parity with Android (rc1+)
+      - Photo capture orientation normalization (rc4)
+      - bbox-based document crop using DocumentScanner's detected boundary (rc6.1)
+      - Liveness challenge orchestration: face-state oval color, countdown
+        gating on face acquisition, post-countdown gesture activation (rc6)
+      - Smile + blink challenges now use Apple's CIDetector classifier
+        instead of unreliable Vision-landmark heuristics (rc6.8)
+      - Result-screen UX: SuccessScreen routing for status="verified",
+        decisionReason display on rejections, ProcessingScreen min-dwell,
+        challenge-complete haptic + checkmark, ScoreBreakdown math fixes
+        (overall = 100 - riskScore, scores.nameMatch direct read), Selfie
+        Match display fix (no more 7,893%)
+      - Backwards-compat shims throughout (default delegate methods,
+        Codable-optional fields with CodingKey remap, legacy detector
+        fallbacks for CIDetector path)
+    Backend dependencies: koraidv-identity revision 00108-dhz onwards
+    (CEngine dual-auth via X-Serverless-Authorization), compliance-gateway
+    with koraidv-cloudrun@koraidv on run.invoker allowlist.
+
     v1.9.0-rc6.8: smile + blink challenges now use Apple's CIDetector
     (CIDetectorSmile + CIDetectorEyeBlink) instead of Vision-landmark
     heuristics. Server-log evidence: 0 smile submissions in 7 days and
