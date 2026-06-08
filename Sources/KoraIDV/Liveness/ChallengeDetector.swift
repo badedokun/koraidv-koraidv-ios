@@ -1,4 +1,5 @@
 import Foundation
+import CoreImage
 
 /// Challenge detection result
 struct ChallengeDetectionResult {
@@ -44,6 +45,39 @@ final class ChallengeDetector {
 
     private var smileDetected = false
 
+    /// **v1.9.0-rc6.8** — Core Image face detector for smile + eye-blink.
+    /// Apple Vision (the framework the rest of the SDK uses) does not
+    /// expose smile or blink probability — only landmarks. The prior
+    /// implementation computed mouth aspect ratio and eye aspect ratio
+    /// (EAR) from those landmarks, but server-log analysis showed it
+    /// never worked reliably:
+    ///   - Smile: 0 submissions in 7 days across all sessions
+    ///   - Blink: 1 submission in last few hours (vs 14 turns, 9 nods)
+    /// Core Image's `CIDetectorTypeFace` with `CIDetectorSmile` +
+    /// `CIDetectorEyeBlink` enabled provides Apple's production smile
+    /// classifier and per-eye open/closed booleans. Has been a stable
+    /// API since iOS 7. Lazy-created on first use; gated to only run
+    /// when current challenge is `.smile` or `.blink` so turn/nod
+    /// challenges keep their Vision-only path with no per-frame
+    /// overhead change.
+    private lazy var coreImageFaceDetector: CIDetector? = {
+        return CIDetector(
+            ofType: CIDetectorTypeFace,
+            context: nil,
+            options: [CIDetectorAccuracy: CIDetectorAccuracyHigh]
+        )
+    }()
+
+    /// **v1.9.0-rc6.8** — minimal two-state machine for the CIDetector
+    /// blink path. Cleaner than the EAR-threshold 4-state machine
+    /// because the inputs are discrete (eye is closed or not) instead
+    /// of noisy floating-point landmark math.
+    private enum CoreImageBlinkState {
+        case waitingForClose  // eyes are open; waiting for them to close
+        case waitingForReopen // eyes are closed; waiting for them to reopen
+    }
+    private var coreImageBlinkState: CoreImageBlinkState = .waitingForClose
+
     private enum BlinkState {
         case open
         case closing
@@ -59,17 +93,25 @@ final class ChallengeDetector {
         reset()
     }
 
-    /// Process a face detection frame
-    func process(face: DetectedFace, challengeType: ChallengeType) -> ChallengeDetectionResult {
+    /// Process a face detection frame.
+    ///
+    /// **v1.9.0-rc6.8** — `ciImage` parameter added. For `.smile` and
+    /// `.blink` challenges the detector runs Core Image's classifier
+    /// on this image; if `ciImage` is nil (e.g. caller didn't construct
+    /// one — defensive only), falls back to the legacy Vision-landmark
+    /// heuristic. For turn/nod challenges, `ciImage` is ignored and
+    /// the existing Vision-based yaw/pitch path runs unchanged.
+    func process(face: DetectedFace, ciImage: CIImage? = nil, challengeType: ChallengeType) -> ChallengeDetectionResult {
         frameCount += 1
 
         let detected: Bool
 
         switch challengeType {
         case .blink:
-            detected = detectBlink(face: face)
+            // Try CIDetector first (reliable); fall back to EAR if unavailable.
+            detected = detectBlinkViaCoreImage(ciImage: ciImage) ?? detectBlink(face: face)
         case .smile:
-            detected = detectSmile(face: face)
+            detected = detectSmileViaCoreImage(ciImage: ciImage) ?? detectSmile(face: face)
         case .turnLeft:
             detected = detectTurn(face: face, direction: .left)
         case .turnRight:
@@ -111,6 +153,73 @@ final class ChallengeDetector {
         initialPitch = nil
         nodDetected = false
         smileDetected = false
+        // **v1.9.0-rc6.8** — reset CIDetector-path blink state too,
+        // so the next challenge starts fresh.
+        coreImageBlinkState = .waitingForClose
+    }
+
+    // MARK: - Core Image-Based Detection (v1.9.0-rc6.8)
+
+    /// Detect smile using Apple's CIDetector. Returns:
+    ///   - `true`  → smile detected (sticky once observed for the
+    ///     current challenge; cleared by `reset()`)
+    ///   - `false` → no smile yet this challenge
+    ///   - `nil`   → CIDetector unavailable or no ciImage; caller
+    ///     should fall back to the legacy heuristic
+    ///
+    /// Compared to the mouth-aspect heuristic this replaces:
+    /// Apple's smile classifier was trained on millions of faces and
+    /// handles head pose, lighting, partial occlusion, and natural
+    /// vs forced smiles. The heuristic compared landmark distances
+    /// with noisy thresholds that Apple Vision's outerLips ordering
+    /// didn't reliably support. Server-log evidence: 0 smile
+    /// submissions in 7 days under the old detector.
+    private func detectSmileViaCoreImage(ciImage: CIImage?) -> Bool? {
+        guard let ciImage = ciImage, let detector = coreImageFaceDetector else {
+            return nil
+        }
+        let features = detector.features(in: ciImage, options: [CIDetectorSmile: true])
+        guard let face = features.first as? CIFaceFeature else {
+            return smileDetected  // no face this frame, return cached state
+        }
+        if face.hasSmile {
+            smileDetected = true
+        }
+        return smileDetected
+    }
+
+    /// Detect blink using Apple's CIDetector. Two-state machine on
+    /// discrete Bool inputs (eyes closed / not) — much simpler and
+    /// more reliable than the four-state EAR machine it replaces.
+    ///
+    /// Requires the full open → both-eyes-closed → both-eyes-open
+    /// cycle to register, so static eyes-closed images don't count
+    /// as a blink. Sticky once observed (matches turn/nod pattern).
+    ///
+    /// Returns `nil` if CIDetector unavailable; caller falls back to
+    /// the EAR heuristic.
+    private func detectBlinkViaCoreImage(ciImage: CIImage?) -> Bool? {
+        guard let ciImage = ciImage, let detector = coreImageFaceDetector else {
+            return nil
+        }
+        let features = detector.features(in: ciImage, options: [CIDetectorEyeBlink: true])
+        guard let face = features.first as? CIFaceFeature else {
+            return blinkDetected  // no face this frame, return cached state
+        }
+        let bothClosed = face.leftEyeClosed && face.rightEyeClosed
+        let bothOpen = !face.leftEyeClosed && !face.rightEyeClosed
+        switch coreImageBlinkState {
+        case .waitingForClose:
+            if bothClosed {
+                coreImageBlinkState = .waitingForReopen
+            }
+        case .waitingForReopen:
+            if bothOpen {
+                coreImageBlinkState = .waitingForClose
+                blinkDetected = true
+            }
+        }
+        return blinkDetected
     }
 
     // MARK: - Blink Detection

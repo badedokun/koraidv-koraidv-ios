@@ -345,8 +345,24 @@ final class LivenessManager: NSObject {
             // user movement during the 3-second countdown.
             guard self.isChallengeActive else { return }
 
+            // **v1.9.0-rc6.8** — construct CIImage from the pixel
+            // buffer so the challenge detector can route smile/blink
+            // challenges to CIDetector (Apple's smile + eye-blink
+            // classifier). For turn/nod challenges the detector
+            // ignores ciImage and uses the existing Vision yaw/pitch
+            // path. CIImage init from a CVPixelBuffer is cheap (no
+            // copy, just wraps the existing buffer), so the cost on
+            // every frame is negligible — the expensive CIDetector
+            // call only fires inside the gated detectors.
+            let ciImage: CIImage?
+            if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+                ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+            } else {
+                ciImage = nil
+            }
             let detectionResult = self.challengeDetector.process(
                 face: face,
+                ciImage: ciImage,
                 challengeType: challenge.type
             )
 

@@ -159,6 +159,20 @@ Pod::Spec.new do |s|
     threshold, set smileDetected = true and keep it true until
     reset() (next challenge). Matches turn/nod pattern.
 
+    v1.9.0-rc6.8: smile + blink challenges now use Apple's CIDetector
+    (CIDetectorSmile + CIDetectorEyeBlink) instead of Vision-landmark
+    heuristics. Server-log evidence: 0 smile submissions in 7 days and
+    only 1 blink submission in hours under the prior implementation —
+    the mouth-aspect ratio and EAR-threshold state machines never
+    fired completed=true reliably on Apple Vision's noisy landmark
+    output. CIDetector provides Apple's production smile classifier
+    (used in iOS smile-burst photography for years) and per-eye
+    open/closed booleans. Gated to only run on smile/blink challenges,
+    so turn/nod paths keep their Vision-only flow with no per-frame
+    overhead change. Falls back to the legacy detectors when CIDetector
+    is unavailable (defensive only). User-perceived: smile and blink
+    challenges now register within 1-2s instead of never.
+
     v1.9.0-rc6.7: six fixes from Stratum Remit 2026-06-07 cross-doc
     test matrix. (1) decisionReason plumbing — backend's specific
     rejection messages ("You selected NG but document was issued by
