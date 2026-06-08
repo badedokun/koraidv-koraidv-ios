@@ -212,16 +212,52 @@ final class DocumentScanner {
             if blockCount >= 1 {
                 self.noDetectionCounter = 0
 
-                // Aggregate text-block bounding boxes into a single bbox.
-                // Mirrors the Android pattern: minX/minY/maxX/maxY across
-                // all blocks, then 10% padding.
+                // **v1.9.1** — spatial-outlier filter on text blocks.
+                //
+                // Before aggregating block frames into a single bbox, drop
+                // outlier blocks whose centroid is far from the dense
+                // document cluster. Without this, ML Kit's noisy text
+                // recognition on patterned backgrounds (Olabode iPhone 12
+                // 2026-06-08: NJ DL on a stained tablecloth) intermittently
+                // detected 1-2 spurious text blocks in the background and
+                // the naive minX/minY/maxX/maxY union stretched the bbox
+                // from the actual document to those false positives —
+                // producing a near-full-frame bbox and effectively no
+                // crop in the review screen. Real documents have many
+                // tightly-clustered text blocks; spurious detections are
+                // isolated. Compute the median block centroid as the
+                // cluster anchor and reject blocks whose distance to the
+                // anchor exceeds 1.5x the median distance, with a 10%
+                // frame-dimension floor on the cutoff to avoid being too
+                // aggressive on documents with naturally spread text
+                // (passport biopages).
+                let allFrames = text.blocks.map { $0.frame }
+                let effectiveFrames: [CGRect]
+                if allFrames.count >= 3 {
+                    let centroids = allFrames.map { CGPoint(x: $0.midX, y: $0.midY) }
+                    let sortedXs = centroids.map { $0.x }.sorted()
+                    let sortedYs = centroids.map { $0.y }.sorted()
+                    let anchor = CGPoint(x: sortedXs[sortedXs.count / 2],
+                                         y: sortedYs[sortedYs.count / 2])
+                    let distances = centroids.map { hypot($0.x - anchor.x, $0.y - anchor.y) }
+                    let sortedDistances = distances.sorted()
+                    let medianDistance = sortedDistances[sortedDistances.count / 2]
+                    let cutoff = max(medianDistance * 1.5, min(width, height) * 0.1)
+                    let kept = zip(allFrames, distances).filter { $1 <= cutoff }.map { $0.0 }
+                    effectiveFrames = kept.isEmpty ? allFrames : kept
+                } else {
+                    // 1-2 blocks: nothing to cluster against. Use as-is.
+                    effectiveFrames = allFrames
+                }
+
+                // Aggregate kept frames into a single bbox.
+                // minX/minY/maxX/maxY across the cluster, then 10% padding.
                 var minX = width
                 var minY = height
                 var maxX: CGFloat = 0
                 var maxY: CGFloat = 0
 
-                for block in text.blocks {
-                    let frame = block.frame
+                for frame in effectiveFrames {
                     minX = min(minX, frame.minX)
                     minY = min(minY, frame.minY)
                     maxX = max(maxX, frame.maxX)
