@@ -247,4 +247,12 @@ Pod::Spec.new do |s|
   # the on-device text-recognition model bundle); same library version
   # range Android uses, so detection behavior is byte-comparable.
   s.dependency 'GoogleMLKit/TextRecognition', '~> 7.0'
+
+  # **v1.9.2 — required for CocoaPods.** Google ML Kit ships as STATIC
+  # frameworks. A pod that depends on ML Kit and is built as a dynamic
+  # framework fails to link the ML Kit symbols (MLKTextRecognizer,
+  # MLKVisionImage, ...) — which is what blocked CocoaPods trunk from v1.9.0
+  # onward (last successful push was v1.8.5, before ML Kit was added).
+  # Marking the pod static_framework links the static ML Kit symbols in.
+  s.static_framework = true
 end
