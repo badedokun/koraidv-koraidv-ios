@@ -398,11 +398,37 @@ final class ChallengeDetector {
 
         let delta = yawFloat - (initialYaw ?? 0)
 
+        // **Yaw-sign correction (BanffPay iOS, 2026-06-16).** On-device
+        // readout on iPhone 13 Pro (iOS 26.5) measured a physical RIGHT turn
+        // at yaw ≈ +0.79 and a LEFT turn negative — the OPPOSITE of what the
+        // pre-existing comparisons assumed (.left expected +delta, .right
+        // expected −delta). The result was the wrong-direction-accept bug:
+        // turn_right accepted a LEFT turn (verified twice) and a genuine right
+        // turn was never detected. `VNFaceObservation.yaw`'s sign is
+        // device/OS-fragile (cf. the Android pitch-sign flip), so the prior
+        // sign was likely correct on an earlier iOS and flipped on an update.
+        // Align to the measured convention: RIGHT = +delta, LEFT = −delta.
+        // (v1.10 durable fix: per-session sign calibration / sign-agnostic
+        // direction so this can't drift again. Keep the server-side
+        // validateChallengeDirection in sync if/when iOS sends yaw diagnostics.)
+        // **Fast-turn fix (BanffPay iOS, 2026-06-16).** LATCH once the turn
+        // crosses the threshold in the correct direction, rather than
+        // reassigning every frame. The completion gate needs
+        // `requiredConsecutiveDetections` (5) consecutive detected frames, but
+        // a FAST turn only holds past the 0.17-rad threshold for 1–2 frames
+        // before the head snaps back (and motion blur can drop face detection
+        // mid-turn) — so the per-frame assignment never accumulated 5 in a row
+        // and quick turns were missed. Latching (which the line-215 comment
+        // already documents as the intended "sticky once observed" turn/nod
+        // behavior) lets the consecutive-frame gate fill in the frames after
+        // the crossing, so a quick turn still completes. `turnDetected` is
+        // cleared per challenge in `reset()`, and only the correctly-signed
+        // crossing sets it, so this doesn't reopen the wrong-direction accept.
         switch direction {
         case .left:
-            turnDetected = delta > turnThreshold
+            if delta < -turnThreshold { turnDetected = true }
         case .right:
-            turnDetected = delta < -turnThreshold
+            if delta > turnThreshold { turnDetected = true }
         }
 
         return turnDetected

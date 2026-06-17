@@ -27,7 +27,7 @@ struct DocumentCaptureView: View {
             }
         }
         .onAppear {
-            viewModel.startCapture { imageData in
+            viewModel.startCapture(detectBarcode: side == .back) { imageData in
                 capturedImageData = imageData
                 showReview = true
             }
@@ -135,6 +135,7 @@ struct DocumentCaptureView: View {
                         .foregroundColor(.white)
                 }
             }
+
         }
         .background(KoraColors.DarkBg)
     }
@@ -189,31 +190,27 @@ struct DocumentCaptureView: View {
 
             // Review card
             //
-            // **v1.9.0-rc6.7** — image scaled to use available area
-            // instead of hardcoded 300×200. Stratum Remit 2026-06-07:
-            // "we need to fill the frame box in review. as you can
-            // see in the image, there are spaces around that we can
-            // fill to enlarge the view." Prior frame was tiny
-            // relative to the iPhone screen, leaving lots of black
-            // padding. New frame fills 92% of screen width and up to
-            // 40% of screen height while preserving aspect ratio via
-            // `.aspectRatio(contentMode: .fit)`. The image stays
-            // proportional so a horizontal ID card displays wide and
-            // short, while a portrait passport biopage displays tall
-            // and narrow — both filling their dimension.
+            // **v1.9.0-rc6.7 → 2026-06-16.** rc6.7 fit the image inside a
+            // FIXED 40%-height box, which left empty bands around a wide DL.
+            // A first pass used `.fill`, but that zoomed/cropped the document
+            // and ballooned the card (BanffPay 2026-06-16: "the original
+            // picture frame should not be resized… fill the taken picture
+            // within that frame, not enlarge everything"). Correct approach:
+            // keep `.fit` (true dimensions — no zoom, no crop) and let the
+            // card adopt the IMAGE's own aspect ratio while filling the
+            // available width. So a wide DL fills width with no side/vertical
+            // padding, at its real proportions; a portrait doc is capped by
+            // maxHeight. No fixed box, no resizing the picture.
             VStack(spacing: 16) {
                 if let uiImage = UIImage(data: imageData) {
-                    GeometryReader { geo in
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: geo.size.width, height: geo.size.height)
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
-                            .accessibilityLabel("Captured document photo")
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: UIScreen.main.bounds.height * 0.40)
-                    .padding(.horizontal, 16)
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .aspectRatio(uiImage.size, contentMode: .fit)
+                        .frame(maxWidth: .infinity)
+                        .frame(maxHeight: UIScreen.main.bounds.height * 0.45)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .padding(.horizontal, 16)
+                        .accessibilityLabel("Captured document photo")
                 }
 
                 ReviewBadge(text: L10n.tr("koraidv.capture.review.quality"))
@@ -412,6 +409,13 @@ class DocumentCaptureViewModel: ObservableObject {
     private var onCapture: ((Data) -> Void)?
     private var isCapturing = false
 
+    /// When true, the document scanner also runs live PDF417 barcode
+    /// detection and folds the barcode bbox into the document region, and the
+    /// captured photo is cropped to the detected card rectangle. Set for the
+    /// BACK side (barcode-dominated, sparse text) so it auto-captures as
+    /// reliably as the text-dense front. See DocumentScanner.detectDocument.
+    private var detectBarcodeForCapture = false
+
     /// Set once a captured frame passes validation and is handed to the
     /// review UI. Blocks subsequent auto-capture firings while the user
     /// is reviewing the committed image. Without this guard the camera
@@ -464,8 +468,9 @@ class DocumentCaptureViewModel: ObservableObject {
     /// by the capture-trigger gate in `cameraManager(_:didOutput:)`.
     private var cameraStartedAt: Date?
 
-    func startCapture(onCapture: @escaping (Data) -> Void) {
+    func startCapture(detectBarcode: Bool = false, onCapture: @escaping (Data) -> Void) {
         self.onCapture = onCapture
+        self.detectBarcodeForCapture = detectBarcode
 
         cameraManager.delegate = self
         cameraManager.requestPermission { [weak self] granted in
@@ -522,7 +527,17 @@ class DocumentCaptureViewModel: ObservableObject {
         // (upper portion of the screen) rather than at the geometric
         // center of the photo. With this, the crop tightly matches
         // the document the SDK was already detecting on every frame.
+        //
         cameraManager.documentBbox = documentScanner.lastBoundsFractional()
+        // **2026-06-16 — back side crops to the detected CARD RECTANGLE.** The
+        // FRONT's text spans the whole card, so its content bbox already equals
+        // the card and fills the review. The BACK's text+barcode only covers
+        // the upper-middle, so a content crop is too small and a centered crop
+        // leaves tablecloth margins (confirmed by pulling the actual capture
+        // from GCS). For the back, detect the card's edges and crop to those
+        // for a tight, full-card image that fills the review like the front.
+        // Falls back to documentBbox / centered crop if no card rect is found.
+        cameraManager.useCardRectCrop = detectBarcodeForCapture
         cameraManager.capturePhoto()
     }
 }
@@ -592,7 +607,7 @@ extension DocumentCaptureViewModel: CameraManagerDelegate {
         // (uses Google ML Kit which takes VisionImage(buffer:)). Saves
         // the CVPixelBuffer extraction round-trip we used to do for
         // Apple Vision's VNDetectDocumentSegmentationRequest.
-        documentScanner.detectDocument(in: sampleBuffer) { [weak self] result in
+        documentScanner.detectDocument(in: sampleBuffer, detectBarcode: self.detectBarcodeForCapture) { [weak self] result in
             DispatchQueue.main.async {
                 guard let self = self else { return }
 
@@ -608,20 +623,37 @@ extension DocumentCaptureViewModel: CameraManagerDelegate {
 
                 self.isDocumentDetected = true
 
-                // v1.8.6: coverage gate runs BEFORE stability. If framing
-                // is unworkable (doc too small or too large), surface the
-                // guidance and suppress auto-capture regardless of how
-                // stable the user's hands are. Matches Android.
-                if let guidance = result.qualityGuidance {
-                    self.feedbackMessage = guidance
-                    self.firstDetectedTime = nil
-                    return
-                }
-
-                // Coverage is acceptable. Start (or continue) the
-                // force-capture deadline timer.
+                // **Android parity fix (BanffPay iOS DL-back, 2026-06-16).**
+                // The force-capture deadline measures HOW LONG THE DOCUMENT
+                // HAS BEEN PRESENT — not how long framing has been perfect —
+                // so start it on first detection, BEFORE the framing-guidance
+                // gate, and reset it only when no document is detected (the
+                // `result == nil` branch above).
+                //
+                // Previously iOS reset this timer on every "move closer"
+                // guidance frame. On a barcode-dominated DL back, ML Kit text
+                // coverage flickers in and out of range, so `qualityGuidance`
+                // toggled frame-to-frame and the 3s timer never accumulated —
+                // the force-capture safety net never fired, and with iOS's
+                // stricter 3-consecutive-stable-frame requirement the back
+                // only snapped when the stars briefly aligned ("unpredictable
+                // when it snaps"). Android resets firstDetectedTime ONLY when
+                // the document isn't detected (CaptureScreens.kt:267-268) and
+                // leaves the timer running through guidance frames, which is
+                // why its back is as reliable as its front. Match that.
                 if self.firstDetectedTime == nil {
                     self.firstDetectedTime = Date()
+                }
+
+                // Coverage gate runs BEFORE stability. If framing is
+                // unworkable (doc too small/large or clipped at an edge),
+                // surface the guidance and suppress auto-capture regardless of
+                // stability — but DO NOT reset the deadline timer (parity fix
+                // above; forceCapture is still gated on guidance == nil below,
+                // exactly like Android).
+                if let guidance = result.qualityGuidance {
+                    self.feedbackMessage = guidance
+                    return
                 }
 
                 let elapsed = self.firstDetectedTime.map { Date().timeIntervalSince($0) } ?? 0
@@ -638,7 +670,16 @@ extension DocumentCaptureViewModel: CameraManagerDelegate {
                 let timeSinceCameraStart = self.cameraStartedAt.map { Date().timeIntervalSince($0) } ?? .infinity
                 let pastSettleDelay = timeSinceCameraStart >= self.cameraSettleDelay
 
-                let shouldCapture = (result.isStable || forceCapture) &&
+                // `result.hasBarcode` (back side) is treated as capture-ready
+                // on its own: a detected PDF417 is a high-confidence
+                // "real document, correctly framed" signal (Vision won't read
+                // a motion-blurred/partial barcode), so the back snaps as soon
+                // as the barcode is in frame — matching the front — instead of
+                // waiting on the 3-consecutive-stable-text-frame burst that the
+                // sparse-text back rarely satisfies. The framing-guidance gate
+                // (handled by the early return above) and the 1.5s camera
+                // settle delay still apply, so this can't fire mid-reach.
+                let shouldCapture = (result.isStable || result.hasBarcode || forceCapture) &&
                                     pastSettleDelay &&
                                     !self.isCapturing &&
                                     !self.hasPendingReview

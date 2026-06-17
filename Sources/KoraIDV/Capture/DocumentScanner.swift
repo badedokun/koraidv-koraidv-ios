@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 import CoreMedia
 import CoreVideo
+import Vision
 import MLKitTextRecognition
 import MLKitVision
 
@@ -23,6 +24,12 @@ struct DocumentDetectionResult {
     let qualityGuidance: String?
     /// Bounding box in pixel coordinates (analysis image space).
     let boundingBox: CGRect
+    /// True when a PDF417 barcode was detected this frame (back side). A
+    /// detected barcode is a high-confidence "real document, correctly
+    /// located" signal, so the caller can treat the frame as capture-ready
+    /// without waiting for the multi-frame text-stability burst — giving the
+    /// barcode-dominated back the same snap-on-sight behavior as the front.
+    let hasBarcode: Bool
 }
 
 /// Document scanner using Google ML Kit Text Recognition.
@@ -158,7 +165,7 @@ final class DocumentScanner {
     /// connection orientation, so the sample buffer's pixel buffer
     /// dimensions are already in portrait coordinate space at the
     /// `.high` session preset (1080 wide × 1920 tall).
-    func detectDocument(in sampleBuffer: CMSampleBuffer, completion: @escaping (DocumentDetectionResult?) -> Void) {
+    func detectDocument(in sampleBuffer: CMSampleBuffer, detectBarcode: Bool = false, completion: @escaping (DocumentDetectionResult?) -> Void) {
         if isAnalyzing {
             // Frame dropped — return cached result so caller's burst stays alive.
             completion(lastDetectionResult)
@@ -172,6 +179,20 @@ final class DocumentScanner {
 
         let width = CGFloat(CVPixelBufferGetWidth(pixelBuffer))
         let height = CGFloat(CVPixelBufferGetHeight(pixelBuffer))
+
+        // **Barcode-signal capture (BanffPay iOS DL-back, 2026-06-16).** A DL
+        // back is dominated by a PDF417 barcode with only sparse text, so the
+        // text-coverage trigger that makes the text-dense FRONT snap reliably
+        // never settles on the back (coverage hovers below minCoverage, the
+        // bbox jitters → unpredictable). When the caller requests it (back
+        // side), detect the barcode live and fold its bounding box into the
+        // document region below, giving the back the same kind of large,
+        // stable, frame-filling feature the front gets from text. Vision's
+        // PDF417 detector is fast and synchronous — run it now while the pixel
+        // buffer is valid (the ML Kit text completion below is async).
+        let barcodeFrame: CGRect? = detectBarcode
+            ? detectPdf417Frame(pixelBuffer: pixelBuffer, width: width, height: height)
+            : nil
 
         let visionImage = VisionImage(buffer: sampleBuffer)
         // **v1.9.0-rc2 fix.** CameraManager configures the video output
@@ -209,7 +230,9 @@ final class DocumentScanner {
 
             let blockCount = text.blocks.count
 
-            if blockCount >= 1 {
+            // Detection is valid when there's text OR a barcode (back side).
+            // The barcode alone is enough to localize/frame a DL back.
+            if blockCount >= 1 || barcodeFrame != nil {
                 self.noDetectionCounter = 0
 
                 // **v1.9.1** — spatial-outlier filter on text blocks.
@@ -250,6 +273,16 @@ final class DocumentScanner {
                     effectiveFrames = allFrames
                 }
 
+                // Fold the live barcode bbox (back side) into the document
+                // region so the back's dominant feature anchors the bbox the
+                // way dense text anchors the front. The barcode is high-
+                // contrast and Vision's bbox is stable frame-to-frame, so the
+                // union settles quickly and clears the coverage gate.
+                var unionFrames = effectiveFrames
+                if let bc = barcodeFrame {
+                    unionFrames.append(bc)
+                }
+
                 // Aggregate kept frames into a single bbox.
                 // minX/minY/maxX/maxY across the cluster, then 10% padding.
                 var minX = width
@@ -257,7 +290,7 @@ final class DocumentScanner {
                 var maxX: CGFloat = 0
                 var maxY: CGFloat = 0
 
-                for frame in effectiveFrames {
+                for frame in unionFrames {
                     minX = min(minX, frame.minX)
                     minY = min(minY, frame.minY)
                     maxX = max(maxX, frame.maxX)
@@ -331,10 +364,23 @@ final class DocumentScanner {
                                   rawMinY < edgePad ||
                                   rawMaxX > (width - edgePad) ||
                                   rawMaxY > (height - edgePad)
+
+                // **DL-back coverage calibration (BanffPay on-device readout,
+                // 2026-06-16).** The DL back is barcode-dominated with sparse
+                // text, so its detected-content bbox covers only ~0.11–0.13 of
+                // the frame even when the card is perfectly framed (measured:
+                // conf 0.61–0.63 → coverage 0.11–0.13). The front's
+                // minCoverage of 0.18 is therefore unreachable on the back —
+                // it sat permanently on "Move closer" and never snapped. Use a
+                // lower back-only floor (0.10) so a well-framed back clears the
+                // gate; the edge-touch guard above still stops the user from
+                // getting so close they clip the card, and the backend still
+                // quality-scores the captured image.
+                let effectiveMinCoverage: CGFloat = detectBarcode ? 0.10 : self.minCoverage
                 let qualityGuidance: String?
                 if touchesEdge {
                     qualityGuidance = "Fit the entire document inside the frame"
-                } else if coverage < self.minCoverage {
+                } else if coverage < effectiveMinCoverage {
                     qualityGuidance = "Move closer to the document"
                 } else if coverage > self.maxCoverage {
                     qualityGuidance = "Move further from the document"
@@ -347,7 +393,8 @@ final class DocumentScanner {
                     corners: corners,
                     isStable: isStable,
                     qualityGuidance: qualityGuidance,
-                    boundingBox: boundingBox
+                    boundingBox: boundingBox,
+                    hasBarcode: barcodeFrame != nil
                 )
 
                 // rc2 diagnostic: emit full coverage chain so QA can
@@ -383,6 +430,44 @@ final class DocumentScanner {
                 completion(self.lastDetectionResult)
             }
         }
+    }
+
+    // MARK: - Barcode (back-side capture signal)
+
+    /// Detect a PDF417 barcode in the frame and return its bounding box in the
+    /// SAME pixel coordinate space as the ML Kit text frames (origin top-left,
+    /// 0…width × 0…height), or nil if none found. Back side only.
+    ///
+    /// We do NOT decode the payload here — presence + location is all the
+    /// auto-capture pipeline needs. The post-capture `BarcodeScanner` still
+    /// decodes the AAMVA data from the final captured image.
+    private func detectPdf417Frame(pixelBuffer: CVPixelBuffer, width: CGFloat, height: CGFloat) -> CGRect? {
+        let request = VNDetectBarcodesRequest()
+        if #available(iOS 15.0, *) {
+            request.symbologies = [.pdf417]
+        } else {
+            request.symbologies = [.PDF417]
+        }
+        // Buffer is already portrait-upright (CameraManager sets the video
+        // connection to .portrait), so use .up — matching the
+        // `visionImage.orientation = .up` used for ML Kit text above so both
+        // detectors share one coordinate frame.
+        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up, options: [:])
+        do {
+            try handler.perform([request])
+        } catch {
+            return nil
+        }
+        guard let observation = request.results?.first else { return nil }
+        // Vision boundingBox: normalized, origin BOTTOM-LEFT. Convert to pixel
+        // coords with origin TOP-LEFT to match the ML Kit text frames.
+        let bb = observation.boundingBox
+        return CGRect(
+            x: bb.origin.x * width,
+            y: (1 - bb.origin.y - bb.size.height) * height,
+            width: bb.size.width * width,
+            height: bb.size.height * height
+        )
     }
 
     // MARK: - Stability

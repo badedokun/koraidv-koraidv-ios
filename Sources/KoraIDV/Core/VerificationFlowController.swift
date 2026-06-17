@@ -746,18 +746,35 @@ final class VerificationFlowController {
     }
 
     private func cancel() {
-        dismiss()
-        completion(.cancelled)
+        dismiss { [completion] in completion(.cancelled) }
     }
 
     private func finish(with result: VerificationResult) {
-        dismiss()
-        completion(result)
+        dismiss { [completion] in completion(result) }
     }
 
-    private func dismiss() {
-        navigationController?.dismiss(animated: true)
+    /// Dismiss the SDK's presented navigation stack and fire `onDismissed`
+    /// only AFTER the dismissal animation has finished.
+    ///
+    /// **Session-continuity fix (BanffPay, iOS, 2026-06-16):** the host's
+    /// completion handler is a natural place to kick off the *next* KYC
+    /// session (`startVerification` again). Previously we called
+    /// `completion(...)` synchronously right after `dismiss(animated: true)`,
+    /// i.e. while the old nav controller was still mid-dismissal. If the host
+    /// re-presented from the same presenter inside that callback, UIKit
+    /// dropped the presentation ("present while a presentation is in
+    /// progress") because the presenter's `presentedViewController` was still
+    /// the dismissing stack — so a new verification flow could not be
+    /// initiated after a previous one. Routing `completion` through the
+    /// dismissal completion block guarantees the presenter is free before the
+    /// host re-presents.
+    private func dismiss(then onDismissed: @escaping () -> Void) {
+        guard let nav = navigationController else {
+            onDismissed()
+            return
+        }
         navigationController = nil
+        nav.dismiss(animated: true, completion: onDismissed)
     }
 
     private func determineCurrentStep(from status: VerificationStatus) -> VerificationStep {
