@@ -103,6 +103,7 @@
 /* Score labels */
 "koraidv.score.overall" = "Overall Score";
 "koraidv.score.liveness" = "Liveness";
+"koraidv.score.screening" = "Screening";
 "koraidv.score.name_match" = "Name Match";
 "koraidv.score.document_quality" = "Document Quality";
 "koraidv.score.selfie_match" = "Selfie Match";

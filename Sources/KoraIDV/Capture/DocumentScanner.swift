@@ -144,6 +144,15 @@ final class DocumentScanner {
     private let minCoverage: CGFloat = 0.18
     private let maxCoverage: CGFloat = 0.85
 
+    /// Live-preview lighting bounds (mean luma, 0-255) for the document scan.
+    /// A too-dark or over-exposed frame degrades the backend document-auth and
+    /// OCR scoring, so coach the user out of bad lighting BEFORE the capture —
+    /// the proactive counterpart to the post-capture glare/blur checks
+    /// (BanffPay robustness, 2026-06-20). Generous bounds: only the genuinely
+    /// bad frames are gated, framing guidance still leads when it applies.
+    private let minDocBrightness: Double = 65
+    private let maxDocBrightness: Double = 230
+
     // MARK: - Recognizer
 
     private let textRecognizer = TextRecognizer.textRecognizer(
@@ -179,6 +188,10 @@ final class DocumentScanner {
 
         let width = CGFloat(CVPixelBufferGetWidth(pixelBuffer))
         let height = CGFloat(CVPixelBufferGetHeight(pixelBuffer))
+
+        // Read frame brightness now, while the pixel buffer is valid and locked
+        // by nothing else, for the proactive lighting gate in the guidance chain.
+        let frameBrightness = DocumentScanner.meanLuma(pixelBuffer)
 
         // **Barcode-signal capture (BanffPay iOS DL-back, 2026-06-16).** A DL
         // back is dominated by a PDF417 barcode with only sparse text, so the
@@ -384,6 +397,12 @@ final class DocumentScanner {
                     qualityGuidance = "Move closer to the document"
                 } else if coverage > self.maxCoverage {
                     qualityGuidance = "Move further from the document"
+                } else if frameBrightness < self.minDocBrightness {
+                    // Framing is fine but the frame is too dark — coach lighting
+                    // rather than letting a dim doc reach docauth/OCR.
+                    qualityGuidance = "Too dark — move to brighter, even lighting"
+                } else if frameBrightness > self.maxDocBrightness {
+                    qualityGuidance = "Too much glare — reduce direct light on the document"
                 } else {
                     qualityGuidance = nil
                 }
@@ -433,6 +452,37 @@ final class DocumentScanner {
     }
 
     // MARK: - Barcode (back-side capture signal)
+
+    /// Mean luma (0-255) of a 32BGRA pixel buffer, sub-sampled on a stride for
+    /// negligible cost. Luma ≈ 0.114·B + 0.587·G + 0.299·R. Returns a neutral
+    /// 128 if the buffer can't be read so a read failure never blocks capture.
+    private static func meanLuma(_ pixelBuffer: CVPixelBuffer) -> Double {
+        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
+        guard let base = CVPixelBufferGetBaseAddress(pixelBuffer) else { return 128 }
+
+        let width = CVPixelBufferGetWidth(pixelBuffer)
+        let height = CVPixelBufferGetHeight(pixelBuffer)
+        let rowBytes = CVPixelBufferGetBytesPerRow(pixelBuffer)
+        let ptr = base.assumingMemoryBound(to: UInt8.self)
+
+        let step = 16
+        var sum = 0.0
+        var count = 0
+        var y = 0
+        while y < height {
+            let row = y * rowBytes
+            var x = 0
+            while x < width {
+                let p = row + x * 4 // BGRA
+                sum += 0.114 * Double(ptr[p]) + 0.587 * Double(ptr[p + 1]) + 0.299 * Double(ptr[p + 2])
+                count += 1
+                x += step
+            }
+            y += step
+        }
+        return count > 0 ? sum / Double(count) : 128
+    }
 
     /// Detect a PDF417 barcode in the frame and return its bounding box in the
     /// SAME pixel coordinate space as the ML Kit text frames (origin top-left,

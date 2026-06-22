@@ -190,12 +190,23 @@ struct SuccessScreen: View {
     }
 
     private func buildMetrics(scores: ScoreBreakdown) -> [ScoreMetric] {
-        [
+        var metrics: [ScoreMetric] = [
             ScoreMetric(label: L10n.tr("koraidv.score.liveness"), score: scores.liveness, iconName: "eye.fill", status: scores.liveness >= 70 ? .pass : .fail),
-            ScoreMetric(label: L10n.tr("koraidv.score.name_match"), score: scores.nameMatch, iconName: "checkmark.circle.fill", status: scores.nameMatch >= 70 ? .pass : .fail),
-            ScoreMetric(label: L10n.tr("koraidv.score.document_quality"), score: scores.documentQuality, iconName: "creditcard.fill", status: scores.documentQuality >= 70 ? .pass : .fail),
-            ScoreMetric(label: L10n.tr("koraidv.score.selfie_match"), score: scores.selfieMatch, iconName: "person.fill", status: scores.selfieMatch >= 70 ? .pass : .fail),
         ]
+        // Screening (compliance) — shown only when the backend ran it, matching
+        // the Android result view (cross-platform parity, 2026-06-22).
+        if let screening = scores.screening {
+            metrics.append(ScoreMetric(label: L10n.tr("koraidv.score.screening"), score: screening, iconName: "shield.fill", status: screening >= 70 ? .pass : .fail))
+        }
+        metrics.append(contentsOf: [
+            ScoreMetric(label: L10n.tr("koraidv.score.name_match"), score: scores.nameMatch, iconName: "checkmark.circle.fill", status: scores.nameMatch >= 70 ? .pass : .fail),
+            // Doc quality + selfie pass-floor is 60 (not 70) — color must match,
+            // or a passed metric shows red (BanffPay 2026-06-22). Selfie also
+            // gets an amber band over the 45-60 manual-review zone.
+            ScoreMetric(label: L10n.tr("koraidv.score.document_quality"), score: scores.documentQuality, iconName: "creditcard.fill", status: scores.documentQuality >= 60 ? .pass : .fail),
+            ScoreMetric(label: L10n.tr("koraidv.score.selfie_match"), score: scores.selfieMatch, iconName: "person.fill", status: scores.selfieMatch >= 60 ? .pass : (scores.selfieMatch >= 45 ? .borderline : .fail)),
+        ])
+        return metrics
     }
 }
 
@@ -288,12 +299,21 @@ struct RejectedScreen: View {
     }
 
     private func buildMetrics(scores: ScoreBreakdown) -> [ScoreMetric] {
-        [
+        var metrics: [ScoreMetric] = [
             ScoreMetric(
                 label: L10n.tr("koraidv.score.liveness"), score: scores.liveness, iconName: "eye.fill",
                 status: scores.liveness >= 70 ? .pass : .fail,
                 errorMessage: scores.liveness < 70 ? L10n.tr("koraidv.score.error.liveness") : nil
             ),
+        ]
+        // Screening (compliance) — shown when the backend ran it (Android parity).
+        if let screening = scores.screening {
+            metrics.append(ScoreMetric(
+                label: L10n.tr("koraidv.score.screening"), score: screening, iconName: "shield.fill",
+                status: screening >= 70 ? .pass : .fail
+            ))
+        }
+        metrics.append(contentsOf: [
             ScoreMetric(
                 label: L10n.tr("koraidv.score.name_match"), score: scores.nameMatch, iconName: "checkmark.circle.fill",
                 status: scores.nameMatch >= 70 ? .pass : .fail,
@@ -301,15 +321,16 @@ struct RejectedScreen: View {
             ),
             ScoreMetric(
                 label: L10n.tr("koraidv.score.document_quality"), score: scores.documentQuality, iconName: "creditcard.fill",
-                status: scores.documentQuality >= 70 ? .pass : .fail,
-                errorMessage: scores.documentQuality < 70 ? L10n.tr("koraidv.score.error.document") : nil
+                status: scores.documentQuality >= 60 ? .pass : .fail,
+                errorMessage: scores.documentQuality < 60 ? L10n.tr("koraidv.score.error.document") : nil
             ),
             ScoreMetric(
                 label: L10n.tr("koraidv.score.selfie_match"), score: scores.selfieMatch, iconName: "person.fill",
-                status: scores.selfieMatch >= 70 ? .pass : .fail,
-                errorMessage: scores.selfieMatch < 70 ? L10n.tr("koraidv.score.error.selfie") : nil
+                status: scores.selfieMatch >= 60 ? .pass : (scores.selfieMatch >= 45 ? .borderline : .fail),
+                errorMessage: scores.selfieMatch < 45 ? L10n.tr("koraidv.score.error.selfie") : nil
             ),
-        ]
+        ])
+        return metrics
     }
 }
 
@@ -485,13 +506,20 @@ struct ManualReviewScreen: View {
     }
 
     private func buildMetrics(scores: ScoreBreakdown) -> [ScoreMetric] {
-        let selfieStatus: MetricStatus = scores.selfieMatch >= 70 ? .pass : (scores.selfieMatch >= 50 ? .borderline : .fail)
-        return [
+        let selfieStatus: MetricStatus = scores.selfieMatch >= 60 ? .pass : (scores.selfieMatch >= 45 ? .borderline : .fail)
+        var metrics: [ScoreMetric] = [
             ScoreMetric(label: L10n.tr("koraidv.score.liveness"), score: scores.liveness, iconName: "eye.fill", status: scores.liveness >= 70 ? .pass : .borderline),
+        ]
+        // Screening (compliance) — shown when the backend ran it (Android parity).
+        if let screening = scores.screening {
+            metrics.append(ScoreMetric(label: L10n.tr("koraidv.score.screening"), score: screening, iconName: "shield.fill", status: screening >= 70 ? .pass : .borderline))
+        }
+        metrics.append(contentsOf: [
             ScoreMetric(label: L10n.tr("koraidv.score.name_match"), score: scores.nameMatch, iconName: "checkmark.circle.fill", status: scores.nameMatch >= 70 ? .pass : .borderline),
             ScoreMetric(label: L10n.tr("koraidv.score.document_quality"), score: scores.documentQuality, iconName: "creditcard.fill", status: scores.documentQuality >= 70 ? .pass : .borderline),
             ScoreMetric(label: L10n.tr("koraidv.score.selfie_match"), score: scores.selfieMatch, iconName: selfieStatus == .borderline ? "info.circle.fill" : "person.fill", status: selfieStatus),
-        ]
+        ])
+        return metrics
     }
 }
 

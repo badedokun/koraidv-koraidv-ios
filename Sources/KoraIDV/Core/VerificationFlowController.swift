@@ -646,7 +646,7 @@ final class VerificationFlowController {
                 })
             }
 
-        case .rejected:
+        case .rejected, .failed:
             if simplified {
                 pushView(SimplifiedFailedScreen(messages: messages) { [weak self] in
                     self?.finish(with: .failure(.unknown("Verification rejected")))
@@ -673,7 +673,7 @@ final class VerificationFlowController {
                 })
             }
 
-        case .reviewRequired:
+        case .reviewRequired, .manualReview:
             if simplified {
                 pushView(SimplifiedReviewScreen(verification: verification, messages: messages) { [weak self] in
                     self?.finish(with: .success(verification))
@@ -790,7 +790,8 @@ final class VerificationFlowController {
         // rc6.2: `verified` is the backend's wire string for auto-approve;
         // `approved` is the legacy alias retained for backwards compat.
         // Both map to the same terminal `result` step here.
-        case .processing, .verified, .approved, .rejected, .reviewRequired:
+        case .processing, .verified, .approved, .rejected, .reviewRequired,
+             .failed, .manualReview, .unknown:
             return .result
         case .expired:
             return .result

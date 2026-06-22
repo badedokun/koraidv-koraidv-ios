@@ -639,6 +639,11 @@ struct ScoreBreakdown {
     let documentQuality: Int
     let selfieMatch: Int
     let overallScore: Int
+    /// Compliance/screening score (sanctions/PEP/adverse-media), 0-100. `nil`
+    /// when the backend didn't run screening (the wire field `complianceScore`
+    /// is omitempty). Surfaced in the result view to match the Android SDK,
+    /// which already shows a Screening row (cross-platform parity, 2026-06-22).
+    let screening: Int?
 
     static func compute(from verification: Verification) -> ScoreBreakdown {
         // **v1.9.0-rc5.2 — overall + nameMatch fix.**
@@ -676,11 +681,17 @@ struct ScoreBreakdown {
         let docScore: Int
         let nameScore: Int
         let overallScore: Int
+        // Screening/compliance: present only when the backend ran it (omitempty).
+        let screeningScore: Int? = scores?.screening.map { Int($0) }
 
         if let scores = scores {
             livenessScore = Int(scores.liveness)
             faceScore = Int(scores.faceMatch)
-            docScore = Int(scores.documentAuth)
+            // The "Document Quality" tile must show documentQuality, not
+            // documentAuth — Android shows documentQuality, and showing auth here
+            // mislabeled it (e.g. a 90-quality doc rendered as "82" because that
+            // was its authenticity score). Cross-platform parity (2026-06-22).
+            docScore = Int(scores.documentQuality)
             nameScore = Int(scores.nameMatch)
             // Prefer `100 - riskScore` over `scores.overall` because
             // riskScore is derived from `final_score` (post-compliance
@@ -716,7 +727,8 @@ struct ScoreBreakdown {
             nameMatch: nameScore,
             documentQuality: docScore,
             selfieMatch: faceScore,
-            overallScore: overallScore
+            overallScore: overallScore,
+            screening: screeningScore
         )
     }
 }

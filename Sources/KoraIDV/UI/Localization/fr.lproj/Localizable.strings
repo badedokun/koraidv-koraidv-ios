@@ -97,6 +97,7 @@
 /* Score labels */
 "koraidv.score.overall" = "Score global";
 "koraidv.score.liveness" = "Présence";
+"koraidv.score.screening" = "Filtrage";
 "koraidv.score.name_match" = "Correspondance du nom";
 "koraidv.score.document_quality" = "Qualité du document";
 "koraidv.score.selfie_match" = "Correspondance du selfie";

@@ -91,8 +91,50 @@ public enum VerificationStatus: String, Codable {
     case verified = "verified"        // rc6.2: backend's auto-approve terminal status
     case approved = "approved"        // legacy, kept for backwards compat
     case rejected = "rejected"
-    case reviewRequired = "review_required"
+    case failed = "failed"            // backend terminal: models.StatusFailed
+    case manualReview = "manual_review" // backend terminal: models.StatusManualReview
+    case reviewRequired = "review_required" // legacy alias — koraidv-identity emits manual_review
     case expired = "expired"
+
+    /// Fallback for any status string this SDK build doesn't recognize.
+    ///
+    /// **v1.9.4 — third recurrence of the same "failed to parse response"
+    /// class.** The backend's terminal-status vocabulary (verified / rejected /
+    /// failed / manual_review / expired — see
+    /// `services/identity-service/internal/models/verification.go:14`) has
+    /// repeatedly drifted ahead of this enum: rc6.2 added `verified`; this build
+    /// adds `failed` + `manual_review` (a real selfie that scored into the
+    /// 70–85 manual-review band returned 200 from `/complete` but threw
+    /// `dataCorrupted` on the non-optional `status` field → host saw "failed to
+    /// parse response", BanffPay 2026-06-20). A custom `init(from:)` that maps
+    /// any unrecognized string to `.unknown` makes decoding forward-compatible
+    /// so a future backend status can never break `/complete` again — the host
+    /// can branch on `.unknown` instead of failing the whole parse.
+    case unknown
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = VerificationStatus(rawValue: raw) ?? .unknown
+    }
+
+    /// True when the verification has reached a final state and can no longer be
+    /// continued. Resuming a terminal verification only replays its result — it
+    /// does NOT start a new flow.
+    ///
+    /// **BanffPay iOS "unable to start a new KYC session" (2026-06):** the host
+    /// app re-established the previous (already-`verified`) token via
+    /// `resumeVerification` instead of `startVerification`, so the user landed
+    /// back on the old result and could never begin fresh. `resumeVerification`
+    /// now rejects a terminal verification with `KoraError.verificationAlreadyCompleted`
+    /// so this mis-call surfaces explicitly instead of silently replaying.
+    public var isTerminal: Bool {
+        switch self {
+        case .verified, .approved, .rejected, .failed, .manualReview, .reviewRequired, .expired:
+            return true
+        case .pending, .documentRequired, .selfieRequired, .livenessRequired, .processing, .unknown:
+            return false
+        }
+    }
 }
 
 /// Document verification result

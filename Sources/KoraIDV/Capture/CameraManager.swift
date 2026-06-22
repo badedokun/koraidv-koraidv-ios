@@ -226,8 +226,22 @@ final class CameraManager: NSObject {
         captureSession.inputs.forEach { captureSession.removeInput($0) }
         captureSession.outputs.forEach { captureSession.removeOutput($0) }
 
-        // Set session preset
-        if captureSession.canSetSessionPreset(.high) {
+        // Set session preset. Document capture uses `.photo` for full-resolution
+        // 4:3 stills; the selfie/liveness camera stays on `.high` (16:9).
+        //
+        // **Back-DL barcode decode fix (BanffPay, 2026-06-20).** A 1.586:1 ID
+        // card has far higher pixel density at 4:3 than 16:9, and a PDF417 on a
+        // DL back needs ~3000px across the card to decode. The `.high` path
+        // (1920×1080) produced a ~730px card crop that no decoder could read —
+        // while the web SDK (full-res 3072×4080) and Android
+        // (CAPTURE_MODE_MAXIMIZE_QUALITY + 4:3 ResolutionSelector,
+        // CameraManager.kt:118) both decode cleanly. `.photo` makes iOS match.
+        // Scoped to `documentMode` so the device-fragile liveness/selfie
+        // pipeline (calibrated to `.high` 16:9) is unaffected.
+        let preferredPreset: AVCaptureSession.Preset = documentMode ? .photo : .high
+        if captureSession.canSetSessionPreset(preferredPreset) {
+            captureSession.sessionPreset = preferredPreset
+        } else if captureSession.canSetSessionPreset(.high) {
             captureSession.sessionPreset = .high
         }
 
@@ -326,31 +340,23 @@ extension CameraManager: AVCapturePhotoCaptureDelegate {
         // the captured photo matches what the user saw in the viewfinder.
         // Now that the input is reliably upright (Step 1), the existing
         // crop logic produces the expected vertical-strip result.
-        let aspectCropped = cropToVideoAspect(portraitData) ?? portraitData
-
-        // **v1.9.0-rc5 — Step 3 (document captures only).** When
-        // `documentMode` is set (by DocumentCaptureView before triggering
-        // capture), additionally crop to a centered ID-1 aspect
-        // (1.586:1) horizontal card. Without this, Stratum Remit 2026-06-06
-        // rc4 review screen still showed the DL as a small card in the
-        // middle of a 1080×1920 portrait frame (~70% wood-grain background)
-        // — even though orientation was correct, the captured photo just
-        // included too much of what the camera saw. Server confirmed
-        // `document_completeness: 60/100` and rejected for "Document
-        // quality too low." Mirrors Android's `cropToDocument` choice
-        // (`koraidv-android/.../DocumentScanner.kt:260`) of a centered
-        // aspect crop over a tight-to-bbox crop — Android explicitly
-        // rejected the latter because "analysis stream and capture stream
-        // can arrive in different orientations." iOS doesn't have that
-        // exact issue post-normalizeToPortrait, but the centered approach
-        // is simpler, doesn't depend on plumbing DocumentScanner's bbox
-        // through to here, and handles the common case (user centers the
-        // doc in the viewfinder).
+        // Step 3 — crop to the document (documents) or the viewfinder aspect
+        // (selfie).
         let finalData: Data
         if documentMode {
-            finalData = cropToDocument(aspectCropped) ?? aspectCropped
+            // **Full-res document crop (BanffPay back-DL fix, 2026-06-20).** Do
+            // NOT 9:16-crop first: under `.photo` the still is full-resolution
+            // 4:3, and a 9:16 crop would trim the card's left/right edges —
+            // clipping the very PDF417 we need to decode. Crop straight to the
+            // detected card on the full-res still (`cropToDocument` →
+            // `detectCardRect` for the back, `documentBbox` for the front), which
+            // preserves the ~3000px-across pixel density the barcode decode needs.
+            // `cropToDocument` still centers/fills the card so the review screen
+            // shows it large (the original reason Step 3 existed).
+            finalData = cropToDocument(portraitData) ?? portraitData
         } else {
-            finalData = aspectCropped
+            // Selfie: crop to the 9:16 viewfinder aspect.
+            finalData = cropToVideoAspect(portraitData) ?? portraitData
         }
         delegate?.cameraManager(self, didCapturePhoto: finalData)
     }

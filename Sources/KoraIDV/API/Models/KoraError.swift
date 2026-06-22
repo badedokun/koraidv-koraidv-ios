@@ -210,7 +210,7 @@ public enum KoraError: LocalizedError {
         case .verificationExpired:
             return "Verification expired. Please start a new verification."
         case .verificationAlreadyCompleted:
-            return "This verification has already been completed."
+            return "This verification has already been completed. To begin a new check, call startVerification() with a fresh externalId rather than resuming this one."
         case .invalidVerificationState(let state):
             return "Invalid verification state: \(state)"
         case .unknown(let message):

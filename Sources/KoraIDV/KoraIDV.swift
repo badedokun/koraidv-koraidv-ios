@@ -124,6 +124,17 @@ public final class KoraIDV {
             DispatchQueue.main.async {
                 switch result {
                 case .success(let verification):
+                    // Guard against resuming a COMPLETED verification. Resuming a
+                    // terminal token only replays its result screen — it cannot
+                    // start a new flow. A host that stores the previous token and
+                    // calls resumeVerification to "start KYC again" would otherwise
+                    // get stuck on the old result and never begin fresh (BanffPay
+                    // iOS "unable to start a new KYC session", 2026-06). Surface it
+                    // explicitly so the host knows to call startVerification instead.
+                    if verification.status.isTerminal {
+                        completion(.failure(KoraError.verificationAlreadyCompleted))
+                        return
+                    }
                     let flowController = VerificationFlowController(
                         verification: verification,
                         configuration: currentState.configuration,
@@ -176,7 +187,7 @@ public final class KoraIDV {
     /// an rc2 build, making it impossible to correlate backend logs
     /// with the actual SDK version that produced them.
     public static var version: String {
-        "1.9.3"
+        "1.9.4"
     }
 
     /// Reset the SDK configuration
