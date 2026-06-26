@@ -87,6 +87,11 @@ struct CountrySelectionView: View {
                     .foregroundColor(Color(hex: "#AAAAAA"))
                 TextField(L10n.tr("koraidv.country.search"), text: $searchQuery)
                     .font(.system(size: 15))
+                    // Explicit dark text — without this the field inherits a
+                    // low-contrast color on the light search background and the
+                    // typed text is nearly unreadable (BanffPay v1.9.4, 2026-06).
+                    .foregroundColor(KoraColors.TextDark)
+                    .tint(KoraColors.Teal)
                     .accessibilityLabel("Search countries")
             }
             .padding(.horizontal, 12)

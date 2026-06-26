@@ -25,7 +25,11 @@ final class SelfieCapture: NSObject {
     private var isCapturing = false
     private var isAutoCaptureEnabled = true
     private var autoCaptureCounter = 0
-    private let autoCaptureThreshold = 10 // Number of valid frames before auto-capture
+    // Valid frames required before auto-capture fires. Raised 10->24 (~0.3s->~0.8s
+    // at 30fps) so the shutter doesn't snap the instant the face is framed —
+    // users had insufficient time to position, causing poor selfies (BanffPay
+    // v1.9.4, 2026-06). The force-capture deadline still guarantees a shot.
+    private let autoCaptureThreshold = 24 // Number of valid frames before auto-capture
 
     /// Minimum face size as percentage of frame
     var minimumFaceSizePercentage: CGFloat = 0.2

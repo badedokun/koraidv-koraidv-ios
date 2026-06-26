@@ -53,12 +53,11 @@ public struct Configuration {
 
     /// REQ-003 — show rich Canvas-drawn capture/liveness illustrations.
     ///
-    /// **iOS support: NOT YET IMPLEMENTED.** This field exists so RN/Flutter
-    /// SDK consumers can pass `showVisualGuides: true` without it crashing
-    /// or being silently dropped at the bridge. On Android the equivalent
-    /// flag renders the v1.3.0 VisualGuides Canvas drawings. iOS will gain
-    /// an equivalent SwiftUI implementation in a later release; until then
-    /// this is a typed no-op (the SDK accepts it but renders nothing extra).
+    /// iOS renders per-challenge directional `VisualGuide` arrows during
+    /// liveness (see LivenessView). **Defaults to `true` as of v1.9.5** so the
+    /// directional guides appear out-of-the-box — integrators previously had to
+    /// set this explicitly, and an app that left it default-off showed only the
+    /// text instruction with no arrow (BanffPay 2026-06). Set `false` to hide.
     public var showVisualGuides: Bool
 
     // MARK: - Initialization
@@ -106,7 +105,7 @@ public struct Configuration {
         self.debugLogging = false
         self.resultPageMode = .detailed
         self.customMessages = nil
-        self.showVisualGuides = false
+        self.showVisualGuides = true
     }
 }
 
