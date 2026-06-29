@@ -1,6 +1,5 @@
 import AVFoundation
 import UIKit
-import Vision
 
 /// Camera position
 public enum CameraPosition {
@@ -59,13 +58,13 @@ final class CameraManager: NSObject {
     /// retakes if the next detection has produced a new bbox.
     var documentBbox: CGRect?
 
-    /// When true (set for the BACK side), the captured photo is cropped to the
-    /// card's detected RECTANGLE rather than the content bbox. The back's
-    /// text+barcode only covers the upper-middle of the card, so a content
-    /// crop is too small and a centered crop leaves tablecloth margins;
-    /// detecting the card's actual edges gives a tight, full-card crop that
-    /// fills the review like the text-dense front. Falls back to documentBbox
-    /// / centered crop when no card rectangle is found. See `cropToDocument`.
+    /// When true (set for the BACK side), the captured photo's content bbox is
+    /// GROWN to the full ID-1 card aspect (about its centre) rather than cropped
+    /// tight to the content. The back's text+barcode under-covers the card, so a
+    /// tight content crop shows only part of it; growing to card aspect recovers
+    /// the whole card deterministically — no rectangle detection (which
+    /// intermittently returned a partial rect → half the card → retries). See
+    /// `cropToDocument`.
     var useCardRectCrop = false
 
     private let sessionQueue = DispatchQueue(label: "com.koraidv.camera.session")
@@ -524,21 +523,39 @@ extension CameraManager: AVCapturePhotoCaptureDelegate {
         guard imageSize.width > 0, imageSize.height > 0 else { return nil }
 
         var cropRect: CGRect
-        if useCardRectCrop, let cardRect = detectCardRect(in: originalImage) {
-            // **Card-rectangle path (back side, 2026-06-16).** `cardRect` is
-            // normalized 0–1, top-left origin — the detected card outline.
-            // Add a small 3% margin and scale to pixels for a tight, full-card
-            // crop that fills the review like the front.
-            let pad: CGFloat = 0.03
-            let px = max(0, cardRect.minX - cardRect.width * pad)
-            let py = max(0, cardRect.minY - cardRect.height * pad)
-            let pw = min(1 - px, cardRect.width * (1 + 2 * pad))
-            let ph = min(1 - py, cardRect.height * (1 + 2 * pad))
+        if useCardRectCrop, let bbox = documentBbox {
+            // **BACK side — deterministic crop (BanffPay retest, 2026-06-28).**
+            // The previous path ran `VNDetectRectangles` on the captured still
+            // and cropped to the largest rectangle. On the barcode-dominated DL
+            // back that detector intermittently returned a PARTIAL rectangle
+            // (or none, falling through to the small text+barcode content bbox),
+            // so the review showed only HALF the card and the user had to
+            // retake several times. Android hit the same "crop strip cut the
+            // card in half" symptom and abandoned rectangle detection here.
+            //
+            // We instead reuse the SAME live content bbox the FRONT trusts (its
+            // capture-space mapping is already proven correct on this device)
+            // and GROW it to the full ID-1 card aspect (1.586:1) about its
+            // centre — anchored on where the document actually sits (the
+            // viewfinder guides it to the upper portion, so a centred crop would
+            // clip it). The back's text+barcode content under-covers the card,
+            // so growing to card aspect + 12% margin recovers the whole card.
+            // Deterministic: no detector, no retries.
+            let aspect: CGFloat = 1.586
+            let pad: CGFloat = 0.12
+            var rw = max(bbox.width, bbox.height * aspect) * (1 + 2 * pad)
+            var rh = rw / aspect
+            rw = min(rw, 1.0)
+            rh = min(rh, 1.0)
+            var rx = bbox.midX - rw / 2
+            var ry = bbox.midY - rh / 2
+            rx = min(max(0, rx), 1 - rw)
+            ry = min(max(0, ry), 1 - rh)
             cropRect = CGRect(
-                x: px * imageSize.width,
-                y: py * imageSize.height,
-                width: pw * imageSize.width,
-                height: ph * imageSize.height
+                x: rx * imageSize.width,
+                y: ry * imageSize.height,
+                width: rw * imageSize.width,
+                height: rh * imageSize.height
             )
         } else if let bbox = documentBbox {
             // **rc6.1 bbox path.** Scale the 0–1 normalized bbox to
@@ -590,33 +607,6 @@ extension CameraManager: AVCapturePhotoCaptureDelegate {
         }
 
         return cropped.jpegData(compressionQuality: 0.92)
-    }
-
-    /// Detect the ID card's rectangle in the captured photo and return its
-    /// bounding box in normalized 0–1 coordinates (top-left origin), or nil if
-    /// no card-like rectangle is found. One-shot on the captured still (not
-    /// per-frame), so live-detection cost is avoided. Used for the BACK crop
-    /// where the text+barcode content bbox doesn't span the whole card.
-    private func detectCardRect(in image: UIImage) -> CGRect? {
-        guard let cgImage = image.cgImage else { return nil }
-        let request = VNDetectRectanglesRequest()
-        // ID-1 card is 1.586:1 → short/long ratio ≈ 0.63; allow a band around
-        // it. minimumSize keeps us off small background rectangles.
-        request.minimumAspectRatio = 0.5
-        request.maximumAspectRatio = 0.85
-        request.minimumSize = 0.3
-        request.minimumConfidence = 0.6
-        request.maximumObservations = 8
-        request.quadratureTolerance = 25
-        let handler = VNImageRequestHandler(cgImage: cgImage, orientation: .up, options: [:])
-        do { try handler.perform([request]) } catch { return nil }
-        // Largest detected rectangle = the card (it dominates the frame).
-        guard let best = request.results?.max(by: {
-            ($0.boundingBox.width * $0.boundingBox.height) <
-            ($1.boundingBox.width * $1.boundingBox.height)
-        }) else { return nil }
-        let bb = best.boundingBox  // Vision: normalized, origin BOTTOM-LEFT.
-        return CGRect(x: bb.minX, y: 1 - bb.minY - bb.height, width: bb.width, height: bb.height)
     }
 }
 

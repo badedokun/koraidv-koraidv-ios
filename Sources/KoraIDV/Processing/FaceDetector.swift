@@ -212,49 +212,114 @@ extension FaceDetector {
             return (false, issues)
         }
 
-        // Check face size
+        // **Face CONTAINMENT in the on-screen oval (BanffPay retest #4).**
+        // Earlier passes checked only the face CENTRE against an acceptance
+        // ellipse, so the SDK snapped the instant the midpoint was in range —
+        // a head that was only PARTLY in the oval (shifted to a side, or too
+        // close and overflowing the guide) still triggered a capture. Testers
+        // wanted it to wait until the WHOLE face is inside. So we now require
+        // the face's bounding box to FIT inside the oval: its centre must lie
+        // within the oval SHRUNK by the face's own half-extent. When the head
+        // is fitted in the oval the (smaller) face box sits comfortably inside
+        // → snaps; when only part of the head is in, the box touches the oval
+        // edge → it keeps waiting.
+        //
+        // Oval geometry in image-normalised coords (derived from the 240×300pt
+        // guide over the aspect-FILL 1080×1920 preview — see retest #3): centre
+        // (0.5, 0.58), half-extents 0.25 horizontal × 0.18 vertical (vertical
+        // compresses because the whole image height maps to the whole screen
+        // height).
+        // **Selfie acceptance — moderate centre region + size band (retest #5).**
+        // Strict containment (retest #4) required the face box to fit fully
+        // INSIDE the oval, but on-device measurement showed testers' faces FILL
+        // the oval (face box ≈ the oval itself), leaving near-zero positional
+        // tolerance — so it could never settle and fell through to the 5s
+        // force-capture (the "6 seconds"). The new camera settle delay
+        // (SelfieCapture) now gives the user ~1.2s to position, so a moderate
+        // centre region behaves well: accept a reasonably-centred, reasonably-
+        // sized face; reject a grossly off-centre or over-close one.
+        //
+        // Region centred at (0.5, 0.62) — where a face aligned to the oval
+        // actually lands (slightly low). Horizontal half-axis kept generous
+        // (0.24) to absorb the front-camera horizontal offset/mirroring we can't
+        // measure from here; vertical tighter (0.16). Size band 0.08–0.30
+        // rejects too-far / too-close.
         let imageArea = result.imageSize.width * result.imageSize.height
         let faceArea = face.boundingBox.width * face.boundingBox.height
-        let faceSizeRatio = faceArea / imageArea
+        let faceSizeRatio = imageArea > 0 ? faceArea / imageArea : 0
 
-        // **v1.9.0-rc3 calibration note.** Lowered from 0.15 → 0.10 to
-        // match Android `QualityValidator.minFaceSizePercentage = 0.10`.
-        // Same FOV-calibration root cause as the document coverage
-        // threshold (see `DocumentScanner.swift`): iPhone front-camera
-        // wide-angle has narrower FOV than typical Android selfie
-        // cameras, so a face inside the standard selfie oval guide
-        // produces a face-area-to-frame-area ratio in the 0.10–0.14
-        // range on iPhone — never reaching the prior 0.15 floor.
-        // Stratum Remit 2026-06-06: "the selfie is the same. you have
-        // to move the phone very close to the face outside the oval
-        // circle before it is detected and captured." Same fix unblocks
-        // the liveness grey-oval-never-green issue, since the oval-color
-        // UI gates on this same validation result.
-        if faceSizeRatio < 0.10 {
-            issues.append("Face is too small. Move closer.")
-        } else if faceSizeRatio > 0.6 {
-            issues.append("Face is too large. Move back.")
+        let w = result.imageSize.width
+        let h = result.imageSize.height
+        let faceCenterX = w > 0 ? face.boundingBox.midX / w : 0.5
+        let faceCenterY = h > 0 ? face.boundingBox.midY / h : 0.5
+
+        // **Calibrated to on-device readings (BanffPay r7, 2026-06-29).** With
+        // the face perfectly in the oval the DETECTOR reports cx≈0.48, cy≈0.67,
+        // sz≈0.06 — the live-detection frame has a far wider FOV than the saved
+        // still, so the face is MUCH smaller in detection coords (0.06) than it
+        // looks in the capture (~0.17). Every prior band was wrong: a 0.08 size
+        // floor rejected the perfectly-centred face as "too small", pushing the
+        // user closer until the head overflowed; and the centre/spread were off.
+        // Centre on (0.48, 0.67); size band 0.035–0.105 around the measured
+        // 0.06; positional half-axes 0.13 (to be tightened/loosened from the
+        // r6 on-screen readout if needed).
+        // Fitted to three on-device readings (r8): in-oval face spans
+        // cx 0.47–0.61, cy 0.66–0.78, sz 0.06–0.14 (detection coords). Centre on
+        // the centroid (0.52, 0.70) with half-axes 0.13×0.12 so all three points
+        // sit inside; size band 0.04–0.16 spans the measured range.
+        if faceSizeRatio < 0.04 {
+            issues.append("Move closer — fill the oval with your face")
+        } else if faceSizeRatio > 0.16 {
+            issues.append("Move back — fit your whole head in the oval")
+        } else {
+            let dx = (faceCenterX - 0.52) / 0.13
+            let dy = (faceCenterY - 0.70) / 0.12
+            if dx * dx + dy * dy > 1.0 {
+                issues.append("Center your face in the oval")
+            }
         }
 
-        // Check face position
-        let faceCenterX = face.boundingBox.midX / result.imageSize.width
-        let faceCenterY = face.boundingBox.midY / result.imageSize.height
-
-        if abs(faceCenterX - 0.5) > 0.2 {
-            issues.append("Center your face horizontally")
-        }
-
-        if abs(faceCenterY - 0.5) > 0.2 {
-            issues.append("Center your face vertically")
-        }
-
-        // Check face angle (if available)
+        // Check face angle (if available). v1.9.6: 0.3 → 0.45 — a slight head
+        // angle is fine for a selfie (face-match is pose-tolerant), and the
+        // strict 0.3 was a frequent cause of counter resets.
         if let yaw = face.yaw {
-            if abs(yaw) > 0.3 {
+            if abs(yaw) > 0.45 {
                 issues.append("Face the camera directly")
             }
         }
 
         return (issues.isEmpty, issues)
+    }
+
+    /// Whether the face is positioned inside the on-screen selfie oval guide.
+    ///
+    /// This is a deliberately **forgiving** "face is roughly inside the oval"
+    /// gate — NOT the strict quality gate (`validateForSelfie` does that). It
+    /// drives the liveness oval-green signal + gesture acceptance and the
+    /// selfie force-capture safety net, so it must pass whenever the face is
+    /// *visually* in the oval and only reject a face jammed at the frame edge.
+    ///
+    /// **v1.9.6 retune (BanffPay, 2026-06).** The original ±0.2 / 0.10–0.6
+    /// tolerances were too tight: on the front camera the preview is
+    /// aspect-FILL cropped, so a face centered in the *on-screen* oval can land
+    /// outside ±0.2 in *image* space (especially vertically) and read smaller
+    /// than 0.10. With the gate failing, gestures never scored and the 12s
+    /// selfie safety net never fired — testers waited 60s+ with the face fully
+    /// in the oval. Widened to ratio 0.07–0.65 and center ±0.30. A corner/edge
+    /// face (the outside-oval case Olabode reported) still fails.
+    ///
+    /// **Deliberately excludes the yaw check** — liveness turn challenges
+    /// legitimately change yaw, so gating gestures on yaw would break turns.
+    func isWithinSelfieOval(face: DetectedFace, imageSize: CGSize) -> Bool {
+        let imageArea = imageSize.width * imageSize.height
+        guard imageArea > 0 else { return false }
+
+        let faceArea = face.boundingBox.width * face.boundingBox.height
+        let ratio = faceArea / imageArea
+        guard ratio >= 0.07, ratio <= 0.65 else { return false }
+
+        let centerX = face.boundingBox.midX / imageSize.width
+        let centerY = face.boundingBox.midY / imageSize.height
+        return abs(centerX - 0.5) <= 0.30 && abs(centerY - 0.5) <= 0.30
     }
 }

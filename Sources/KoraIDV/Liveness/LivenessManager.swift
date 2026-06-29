@@ -318,18 +318,25 @@ final class LivenessManager: NSObject {
 
             defer { self.isProcessing = false }
 
-            // **v1.9.0-rc6** — always update face-detected state, even
-            // when the challenge isn't active yet (LivenessView needs
-            // this signal to color the oval green and to start its
-            // countdown only once face is in confident range). The
-            // ChallengeDetector branch below is what's gated, not face
-            // detection.
-            let faceVisible = (result?.faces.first != nil)
+            // **v1.9.6 — gate on face IN the oval, not merely present.**
+            // Previously `faceVisible` was `result?.faces.first != nil`, so the
+            // oval greened / countdown started (and gestures were accepted) for
+            // a face anywhere in frame — even well outside the oval guide. That
+            // diverged from Android, which only reacts when the face is inside
+            // the oval, and caused failed captures / repeated attempts on iOS
+            // (BanffPay v1.9.5, 2026-06). We now require the face to pass the
+            // position+size in-oval check (no yaw component, so turns still
+            // work) before greening the oval AND before feeding the gesture
+            // detector.
+            let faceInOval: Bool = {
+                guard let r = result, let f = r.faces.first else { return false }
+                return self.faceDetector.isWithinSelfieOval(face: f, imageSize: r.imageSize)
+            }()
             let priorFaceState = self.isFaceDetected
-            if priorFaceState != faceVisible {
-                self.isFaceDetected = faceVisible
+            if priorFaceState != faceInOval {
+                self.isFaceDetected = faceInOval
                 DispatchQueue.main.async {
-                    self.delegate?.livenessManager(self, didChangeFaceDetected: faceVisible)
+                    self.delegate?.livenessManager(self, didChangeFaceDetected: faceInOval)
                 }
             }
 
@@ -344,6 +351,13 @@ final class LivenessManager: NSObject {
             // it stops the SDK from auto-completing challenges on
             // user movement during the 3-second countdown.
             guard self.isChallengeActive else { return }
+
+            // **v1.9.6** — do not score gestures unless the face is in the oval.
+            // Matches Android: a gesture performed with the face outside the
+            // oval guide must not count. Prevents the false captures Olabode
+            // reported where the face was outside the oval yet a challenge
+            // completed.
+            guard faceInOval else { return }
 
             // **v1.9.0-rc6.8** — construct CIImage from the pixel
             // buffer so the challenge detector can route smile/blink

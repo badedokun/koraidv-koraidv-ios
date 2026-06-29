@@ -25,11 +25,14 @@ final class SelfieCapture: NSObject {
     private var isCapturing = false
     private var isAutoCaptureEnabled = true
     private var autoCaptureCounter = 0
-    // Valid frames required before auto-capture fires. Raised 10->24 (~0.3s->~0.8s
-    // at 30fps) so the shutter doesn't snap the instant the face is framed —
-    // users had insufficient time to position, causing poor selfies (BanffPay
-    // v1.9.4, 2026-06). The force-capture deadline still guarantees a shot.
-    private let autoCaptureThreshold = 24 // Number of valid frames before auto-capture
+    // Valid frames required before auto-capture fires. History: 10 was twitchy
+    // (snapped before the user could settle, BanffPay v1.9.4); 24 with a
+    // reset-to-0 on any bad frame was the opposite — a single flickery
+    // lighting/yaw frame wiped all progress, so it rarely reached 24 and testers
+    // waited 60s+ with the face in the oval (BanffPay v1.9.6, 2026-06). Now 16
+    // frames (~0.5s at 30fps) combined with a *decrement* (not reset) on bad
+    // frames below, so transient flicker no longer thrashes the counter.
+    private let autoCaptureThreshold = 16 // Number of valid frames before auto-capture
 
     /// Minimum face size as percentage of frame
     var minimumFaceSizePercentage: CGFloat = 0.2
@@ -60,8 +63,22 @@ final class SelfieCapture: NSObject {
     /// stranded (iOS selfie has no manual shutter). Parity with Android's selfie
     /// force-capture; the backend then returns a clear reason if the shot is
     /// genuinely too poor. The coaching runs the whole time first.
-    var selfieForceCaptureDeadline: TimeInterval = 12.0
+    /// v1.9.6 (BanffPay): 12s → 8s → 5s. With the vertically-recentred
+    /// acceptance ellipse the fast auto-capture now fires for a normally-held
+    /// face, so this is only a last-resort floor; 5s keeps even edge cases from
+    /// feeling stuck.
+    var selfieForceCaptureDeadline: TimeInterval = 5.0
     private var firstFaceSeenAt: Date?
+
+    /// **Camera settle delay (BanffPay retest #5).** Minimum time between the
+    /// camera starting and ANY auto/force capture firing. Without it the selfie
+    /// snapped the instant the camera opened with a face already in frame — the
+    /// "takes the pic as soon as the oval appears" report — giving the user no
+    /// time to position. Mirrors the document path's `cameraSettleDelay`.
+    private let selfieSettleDelay: TimeInterval = 1.2
+    /// Set when the camera session starts (and re-armed on retake); used by the
+    /// settle-delay gate in `handleFaceDetection`.
+    private var cameraStartedAt: Date?
 
     /// Auto-capture enabled
     var autoCaptureEnabled: Bool {
@@ -93,6 +110,9 @@ final class SelfieCapture: NSObject {
             switch result {
             case .success:
                 self.cameraManager.start()
+                // retest #5: arm the settle delay so capture can't fire for the
+                // first `selfieSettleDelay` seconds after the camera opens.
+                self.cameraStartedAt = Date()
                 completion(.success(()))
             case .failure(let error):
                 completion(.failure(error))
@@ -132,6 +152,9 @@ final class SelfieCapture: NSObject {
         isCapturing = false
         autoCaptureCounter = 0
         firstFaceSeenAt = nil
+        // Re-arm the settle delay so a retake gets the same positioning
+        // headroom as the initial capture instead of firing immediately.
+        cameraStartedAt = Date()
     }
 
     // MARK: - Private Methods
@@ -162,39 +185,75 @@ final class SelfieCapture: NSObject {
         // Start the force-capture clock on the first continuous sighting of a face.
         if firstFaceSeenAt == nil { firstFaceSeenAt = Date() }
 
+        // POSITION + SIZE (+yaw) are *blocking* — we never auto-capture a face
+        // outside the oval. These are the only issues the auto-capture gate
+        // keys off below.
         let validation = faceDetector.validateForSelfie(result: result)
-        var issues = validation.issues
+        let issues = validation.issues
 
-        // Proactive lighting coaching — appended after the face-position issues
-        // so position guidance leads when both apply. Gates on the face's own
-        // exposure (center region, per the oval guide) plus a backlight check
-        // (large blown-out region), so a bright window beside the user is caught
-        // BEFORE the shot rather than failing face-match after it.
+        // Lighting is *advisory* coaching only — NOT a capture blocker.
+        // BanffPay v1.9.6 retest: testers in a room with a window behind them
+        // hit the backlight check on every frame, so the fast auto-capture
+        // never fired and every selfie fell through to the 8s force-capture
+        // (the "snaps only after 8–9s" report). A user can't fix their room's
+        // lighting, so we coach but still capture once they're positioned; the
+        // backend scores the lighting and returns a clear reason if the shot is
+        // genuinely too poor.
+        var lightingCoaching: [String] = []
         if lighting.center < minFaceBrightness {
-            issues.append("More light on your face — turn toward the light")
+            lightingCoaching.append("More light on your face — turn toward the light")
         } else if lighting.center > maxFaceBrightness {
-            issues.append("Too bright — reduce glare or direct light")
+            lightingCoaching.append("Too bright — reduce glare or direct light")
         } else if lighting.blown > backlightBlownFraction {
-            issues.append("Strong light behind you — turn to face the light")
+            lightingCoaching.append("Strong light behind you — turn to face the light")
         }
 
-        delegate?.selfieCapture(self, didUpdateValidation: issues)
+        // Show position issues first (they lead), then lighting coaching.
+        delegate?.selfieCapture(self, didUpdateValidation: issues + lightingCoaching)
 
         let heldLongEnough = firstFaceSeenAt.map {
             Date().timeIntervalSince($0) >= selfieForceCaptureDeadline
         } ?? false
 
+        // retest #5: the camera must have been open for `selfieSettleDelay`
+        // before any capture fires. The counter still accumulates while the
+        // face is well-positioned, but the SHUTTER is held until settled, so
+        // a face already in frame at camera-open captures at ~1.2s (time to
+        // position) instead of instantly.
+        let settled = cameraStartedAt.map {
+            Date().timeIntervalSince($0) >= selfieSettleDelay
+        } ?? false
+
+        // **v1.9.6** — whether the face is inside the oval guide (position+size
+        // only, no yaw). The force-capture fallback below requires this so we
+        // never force-capture a selfie with the face OUTSIDE the oval — the
+        // same outside-oval capture Olabode reported for the selfie step
+        // (BanffPay v1.9.5, 2026-06). A persistent lighting issue still rescues
+        // via force-capture once the face is positioned; a position failure
+        // does not.
+        let faceInOval = result.faces.first.map {
+            faceDetector.isWithinSelfieOval(face: $0, imageSize: result.imageSize)
+        } ?? false
+
         if issues.isEmpty && isAutoCaptureEnabled {
             autoCaptureCounter += 1
-            if autoCaptureCounter >= autoCaptureThreshold && !isCapturing {
+            if autoCaptureCounter >= autoCaptureThreshold && settled && !isCapturing {
                 capture()
             }
-        } else if heldLongEnough && isAutoCaptureEnabled && !isCapturing {
-            // Coached for the full deadline but the gate never cleared — capture
+        } else if heldLongEnough && faceInOval && isAutoCaptureEnabled && !isCapturing {
+            // Coached for the full deadline and the face IS in the oval, but a
+            // non-positional issue (e.g. lighting) never cleared — capture
             // anyway so the user is never stranded (no manual shutter on iOS).
+            // Gating on faceInOval is what prevents the outside-oval selfie.
             capture()
         } else {
-            autoCaptureCounter = 0
+            // v1.9.6 (BanffPay): decrement instead of resetting to 0 so a
+            // single flickery frame (transient lighting/yaw) doesn't wipe all
+            // accumulated progress. A *sustained* bad streak still drains the
+            // counter quickly (so a genuine move-away won't auto-capture), but a
+            // mostly-good scene with occasional flicker now climbs steadily to
+            // the threshold instead of thrashing back to zero.
+            autoCaptureCounter = max(0, autoCaptureCounter - 2)
         }
     }
 

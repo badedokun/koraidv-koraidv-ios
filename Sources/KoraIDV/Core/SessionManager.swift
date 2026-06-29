@@ -210,13 +210,16 @@ public final class SessionManager {
     /// matches the Android English defaults for the v1.7.0 cutover; pull
     /// into L10n on the next pass.
     private static func instructionForChallengeType(_ type: ChallengeType) -> String {
+        // Keep your face centered in the circle, then perform the gesture.
+        // Phrased plainly and warmly for first-time / less tech-savvy users
+        // (BanffPay v1.9.5 guidance feedback, 2026-06).
         switch type {
-        case .blink: return "Blink your eyes slowly"
-        case .smile: return "Smile naturally"
-        case .turnLeft: return "Slowly turn your head to the left"
-        case .turnRight: return "Slowly turn your head to the right"
-        case .nodUp: return "Slowly tilt your head up"
-        case .nodDown: return "Slowly tilt your head down"
+        case .blink: return "Keep your face in the circle, then blink a few times"
+        case .smile: return "Keep your face in the circle, then give a big smile"
+        case .turnLeft: return "Keep your face in the circle, then slowly turn your head left"
+        case .turnRight: return "Keep your face in the circle, then slowly turn your head right"
+        case .nodUp: return "Keep your face in the circle, then gently tilt your head up"
+        case .nodDown: return "Keep your face in the circle, then gently tilt your head down"
         }
     }
 

@@ -131,7 +131,21 @@ struct LivenessView: View {
                 }
                 .animation(.easeInOut(duration: 0.2), value: viewModel.showChallengeCompleteCheck)
 
-                Spacer().frame(height: 24)
+                Spacer().frame(height: 20)
+
+                // Dynamic guidance — explicit positioning + encouragement
+                // (BanffPay v1.9.6 item 2B). Amber = "get your face in the
+                // circle", teal = "you're set, go".
+                Text(viewModel.guidanceText)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(viewModel.guidanceIsReady ? KoraColors.Teal : Color(red: 1.0, green: 0.82, blue: 0.35))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                    .frame(minHeight: 24)
+                    .animation(.easeInOut(duration: 0.2), value: viewModel.guidanceText)
+                    .accessibilityLabel(viewModel.guidanceText)
+
+                Spacer().frame(height: 16)
 
                 // Challenge progress dots
                 ChallengeDots(
@@ -218,6 +232,35 @@ class LivenessViewModel: ObservableObject {
     /// the timer in the same callback. The LivenessView body binds
     /// to this and renders an overlay above the oval when true.
     @Published var showChallengeCompleteCheck: Bool = false
+
+    /// **Dynamic guidance (BanffPay v1.9.6, item 2B — clearer in-app guidance).**
+    /// One state-aware line shown below the oval so the user always knows what
+    /// to do RIGHT NOW: an explicit positioning prompt when their face isn't in
+    /// the circle, "hold still" during the countdown, the action cue while the
+    /// challenge is active, and an encouraging word the instant it registers.
+    var guidanceText: String {
+        if showChallengeCompleteCheck { return "Nice! 👍" }
+        if !isFaceDetected { return "Move your face into the circle" }
+        if countdown > 0 { return "Perfect — hold still" }
+        if let type = currentChallenge?.type { return Self.actionCue(for: type) }
+        return "Hold still"
+    }
+
+    /// Teal (ready) vs amber (needs positioning) tint for `guidanceText`.
+    var guidanceIsReady: Bool {
+        isFaceDetected || showChallengeCompleteCheck
+    }
+
+    private static func actionCue(for type: ChallengeType) -> String {
+        switch type {
+        case .blink: return "Now blink a few times"
+        case .smile: return "Now give a big smile 😊"
+        case .turnLeft: return "Now slowly turn your head left"
+        case .turnRight: return "Now slowly turn your head right"
+        case .nodUp: return "Now gently look up"
+        case .nodDown: return "Now gently look down"
+        }
+    }
 
     init(session: LivenessSession) {
         self.session = session

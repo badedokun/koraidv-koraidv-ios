@@ -77,41 +77,43 @@ struct SelfieCaptureView: View {
 
                 Spacer().frame(height: 24)
 
-                // Oval viewfinder with rotating ring
+                // Oval viewfinder. The FRAME ITSELF is the only detector signal
+                // — NO spinning ring and NO sweeping progress arc (testers found
+                // both distracting; the progress arc cycled because captureProgress
+                // resets on any positioning flicker, BanffPay 2026-06-29). Calm,
+                // motion-free pattern change by state:
+                //   • scanning (no face): thin solid grey line
+                //   • detected, not yet lined up: DASHED teal ("I see you —
+                //     line up in the oval")
+                //   • positioned (isReady): solid, thicker bright teal ("set —
+                //     hold still"); the photo snaps a beat later.
                 ZStack {
-                    // Rotating ring animation
-                    if viewModel.isFaceDetected {
-                        RotatingRingView()
-                            .frame(width: 250, height: 310)
-                    }
-
-                    // Oval guide
                     Ellipse()
                         .stroke(
                             viewModel.isFaceDetected ? KoraColors.Teal : Color.white.opacity(0.3),
-                            lineWidth: 3
+                            style: StrokeStyle(
+                                lineWidth: viewModel.isReady ? 5 : 3,
+                                dash: (viewModel.isFaceDetected && !viewModel.isReady) ? [9, 7] : []
+                            )
                         )
                         .frame(width: 240, height: 300)
-
-                    // Progress ring
-                    if viewModel.isFaceDetected {
-                        Ellipse()
-                            .trim(from: 0, to: CGFloat(viewModel.captureProgress))
-                            .stroke(KoraColors.Teal, lineWidth: 4)
-                            .frame(width: 248, height: 308)
-                            .rotationEffect(.degrees(-90))
-                            .animation(.linear(duration: 0.1), value: viewModel.captureProgress)
-                            .accessibilityLabel("Capture progress")
-                            .accessibilityValue("\(Int(viewModel.captureProgress * 100)) percent")
-                    }
+                        .animation(.easeInOut(duration: 0.25), value: viewModel.isReady)
+                        .animation(.easeInOut(duration: 0.25), value: viewModel.isFaceDetected)
                 }
 
                 Spacer().frame(height: 24)
 
-                // Guidance pill
+                // Guidance pill — surfaces the specific positioning/lighting
+                // coaching the detector produces ("Center your face in the oval",
+                // "Move closer"/"Move back", "Strong light behind you"), falling
+                // back to the ready/scanning state. (BanffPay v1.9.6 item 2B —
+                // explicit, real-time guidance.)
                 GuidancePill(
-                    text: viewModel.isFaceDetected ? L10n.tr("koraidv.selfie.hold_still") : L10n.tr("koraidv.selfie.detecting"),
-                    variant: viewModel.isFaceDetected ? .ready : .scanning
+                    text: viewModel.feedbackMessage
+                        ?? (viewModel.isFaceDetected
+                            ? L10n.tr("koraidv.selfie.hold_still")
+                            : L10n.tr("koraidv.selfie.detecting")),
+                    variant: (viewModel.feedbackMessage == nil && viewModel.isFaceDetected) ? .ready : .scanning
                 )
 
                 Spacer()
@@ -224,33 +226,6 @@ struct SelfieCaptureView: View {
     }
 }
 
-// MARK: - Rotating Ring
-
-private struct RotatingRingView: View {
-    @State private var rotation: Double = 0
-
-    var body: some View {
-        Ellipse()
-            .stroke(
-                AngularGradient(
-                    gradient: Gradient(colors: [
-                        KoraColors.Teal.opacity(0),
-                        KoraColors.Teal.opacity(0.5),
-                        KoraColors.Teal.opacity(0)
-                    ]),
-                    center: .center
-                ),
-                lineWidth: 4
-            )
-            .rotationEffect(.degrees(rotation))
-            .onAppear {
-                withAnimation(.linear(duration: 3).repeatForever(autoreverses: false)) {
-                    rotation = 360
-                }
-            }
-    }
-}
-
 // MARK: - View Model
 
 class SelfieCaptureViewModel: ObservableObject {
@@ -258,6 +233,11 @@ class SelfieCaptureViewModel: ObservableObject {
     @Published var feedbackMessage: String?
     @Published var isProcessing = false
     @Published var captureProgress: Float = 0
+
+    /// True only when a face is present AND there's no outstanding coaching —
+    /// i.e. the face is correctly positioned and the SDK is ready to capture.
+    /// Drives the green oval so the colour is a trustworthy "you're set" signal.
+    var isReady: Bool { isFaceDetected && feedbackMessage == nil }
 
     let selfieCapture = SelfieCapture()
     private var onCapture: ((Data) -> Void)?
