@@ -401,7 +401,8 @@ final class VerificationFlowController {
             onCancel: { [weak self] in
                 self?.cancel()
             },
-            showVisualGuides: configuration.showVisualGuides
+            showVisualGuides: configuration.showVisualGuides,
+            showEyewearGuidance: configuration.showEyewearGuidance
         )
 
         pushView(selfieView)

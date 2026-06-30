@@ -60,6 +60,15 @@ public struct Configuration {
     /// text instruction with no arrow (BanffPay 2026-06). Set `false` to hide.
     public var showVisualGuides: Bool
 
+    /// Whether to coach the user to remove eyeglasses for the selfie (Phase 1
+    /// of the eyeglasses policy — see docs/eyeglasses-policy-research-and-decision.md).
+    /// Defaults to `true`: the issued ID portrait is glasses-free by government
+    /// standard, so a glasses-free selfie maximizes face-match reliability and
+    /// closes the document↔selfie asymmetry. Set `false` to suppress the prompt.
+    /// (A per-tenant, session-driven `selfieEyewearPolicy` supersedes this in a
+    /// later phase; this flag is the integrator-level toggle for now.)
+    public var showEyewearGuidance: Bool
+
     // MARK: - Initialization
 
     /// Initialize SDK configuration
@@ -106,6 +115,7 @@ public struct Configuration {
         self.resultPageMode = .detailed
         self.customMessages = nil
         self.showVisualGuides = true
+        self.showEyewearGuidance = true
     }
 }
 

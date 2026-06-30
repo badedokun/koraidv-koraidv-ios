@@ -35,13 +35,14 @@ enum DocumentDewarper {
         let w = CGFloat(cgImage.width)
         let h = CGFloat(cgImage.height)
 
+        _ = ci  // (CIImage no longer needed — see cropToQuad note)
         // Stage 1 — document segmentation (best for the white/back card).
         if #available(iOS 15.0, *), let quad = detectWithSegmentation(cgImage) {
-            if let out = warp(ci: ci, w: w, h: h, quad: quad) { return out }
+            if let out = cropToQuad(cgImage: cgImage, w: w, h: h, quad: quad) { return out }
         }
         // Stage 2 — generic rectangle detector.
         if let quad = detectWithRectangles(cgImage) {
-            if let out = warp(ci: ci, w: w, h: h, quad: quad) { return out }
+            if let out = cropToQuad(cgImage: cgImage, w: w, h: h, quad: quad) { return out }
         }
         KoraIDV.log("DocumentDewarper: no quadrilateral found")
         return nil
@@ -90,39 +91,61 @@ enum DocumentDewarper {
         })
     }
 
-    // MARK: - Warp
+    // MARK: - Crop
 
-    private static func warp(ci: CIImage, w: CGFloat, h: CGFloat, quad: VNRectangleObservation) -> UIImage? {
-        // Vision corners: normalized (0–1), origin BOTTOM-LEFT — same convention
-        // as CIImage, so scaling by pixel dimensions maps straight across.
-        func px(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x * w, y: p.y * h) }
+    /// **Tight axis-aligned crop to the detected document (passport stretch
+    /// fix, 2026-06-30).** Replaces the previous `CIPerspectiveCorrection`
+    /// warp, which forced/мis-sized the output aspect and stretched non-card
+    /// documents (a passport data page is ~1.42:1, not the ID-1 1.586:1 a
+    /// card is). A pure crop to the detected quad's bounding box CANNOT
+    /// distort the aspect — it returns the document at its true proportions,
+    /// just tightly framed (the same un-stretched look as the legacy fallback,
+    /// but tighter). It still fixes the loose/overshoot framing the dewarp was
+    /// added for. We trade away perspective de-skew for a guarantee of no
+    /// stretch; documents are held roughly flat in the card window, so residual
+    /// tilt is minimal and acceptable.
+    private static func cropToQuad(cgImage: CGImage, w: CGFloat, h: CGFloat, quad: VNRectangleObservation) -> UIImage? {
+        let xs = [quad.topLeft.x, quad.topRight.x, quad.bottomLeft.x, quad.bottomRight.x]
+        let ys = [quad.topLeft.y, quad.topRight.y, quad.bottomLeft.y, quad.bottomRight.y]
 
-        guard let filter = CIFilter(name: "CIPerspectiveCorrection") else { return nil }
-        filter.setValue(ci, forKey: kCIInputImageKey)
-        filter.setValue(CIVector(cgPoint: px(quad.topLeft)), forKey: "inputTopLeft")
-        filter.setValue(CIVector(cgPoint: px(quad.topRight)), forKey: "inputTopRight")
-        filter.setValue(CIVector(cgPoint: px(quad.bottomLeft)), forKey: "inputBottomLeft")
-        filter.setValue(CIVector(cgPoint: px(quad.bottomRight)), forKey: "inputBottomRight")
+        // Vision normalized → pixels (Vision origin is BOTTOM-LEFT).
+        var minX = (xs.min() ?? 0) * w
+        var maxX = (xs.max() ?? 0) * w
+        var minY = (ys.min() ?? 0) * h
+        var maxY = (ys.max() ?? 0) * h
 
-        guard let corrected = filter.outputImage else { return nil }
-        let ext = corrected.extent
-        guard ext.width > 1, ext.height > 1, ext.width.isFinite, ext.height.isFinite else {
-            return nil
-        }
+        // Small symmetric padding so we don't shave the document edge.
+        let padX = (maxX - minX) * 0.02
+        let padY = (maxY - minY) * 0.02
+        minX = max(0, minX - padX); maxX = min(w, maxX + padX)
+        minY = max(0, minY - padY); maxY = min(h, maxY + padY)
 
-        let outW = outputWidth
-        let outH = (outputWidth / id1Aspect).rounded()
-        let scaled = corrected
-            .transformed(by: CGAffineTransform(translationX: -ext.origin.x, y: -ext.origin.y))
-            .transformed(by: CGAffineTransform(scaleX: outW / ext.width, y: outH / ext.height))
+        // **Keep the MRZ; widen to the capture-frame aspect (BanffPay v1.9.7
+        // retest, 2026-06-30).** For a passport the machine-readable zone (MRZ)
+        // runs along the BOTTOM of the data page and is the critical region —
+        // it must ALWAYS be in view, more important than excluding the adjacent
+        // page. So we preserve the FULL detected document HEIGHT (never trim
+        // height to reach the aspect — that was clipping the MRZ) and only WIDEN
+        // to the 1.586:1 capture-frame aspect for review consistency. A passport
+        // (~1.42:1) gets a small symmetric side margin to reach 1.586 (which may
+        // include a sliver of the facing page — acceptable). If the required
+        // width would exceed the image, we keep a slightly taller-than-1.586
+        // frame rather than lose the MRZ. Still a pure crop → no stretch.
+        let aspect: CGFloat = 1.586
+        let cx = (minX + maxX) / 2
+        let cy = (minY + maxY) / 2
+        let ch = min(maxY - minY, h)
+        var cw = ch * aspect
+        if cw > w { cw = w }                 // accept a touch taller than 1.586 to keep the MRZ
+        guard cw > 1, ch > 1 else { return nil }
+        var cropX = cx - cw / 2
+        var cropYv = cy - ch / 2   // Vision (bottom-left) pixel coords
+        cropX = min(max(0, cropX), w - cw)
+        cropYv = min(max(0, cropYv), h - ch)
 
-        let context = CIContext(options: nil)
-        guard let outCG = context.createCGImage(
-            scaled,
-            from: CGRect(x: 0, y: 0, width: outW, height: outH)
-        ) else {
-            return nil
-        }
-        return UIImage(cgImage: outCG)
+        // CGImage cropping uses a TOP-LEFT origin, so flip Y.
+        let cropRect = CGRect(x: cropX, y: h - (cropYv + ch), width: cw, height: ch)
+        guard let cropped = cgImage.cropping(to: cropRect) else { return nil }
+        return UIImage(cgImage: cropped)
     }
 }

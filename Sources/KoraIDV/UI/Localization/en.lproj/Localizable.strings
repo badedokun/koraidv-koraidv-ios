@@ -7,6 +7,8 @@
 "koraidv.consent.item.selfie.subtitle" = "A quick selfie to match your ID";
 "koraidv.consent.item.liveness.title" = "Liveness check";
 "koraidv.consent.item.liveness.subtitle" = "Quick video to confirm it's really you";
+"koraidv.consent.item.eyewear.title" = "Remove sunglasses";
+"koraidv.consent.item.eyewear.subtitle" = "Your eyes must be clearly visible — take off sunglasses or tinted glasses for your selfie";
 "koraidv.consent.button" = "Get started";
 "koraidv.consent.privacy" = "By continuing, you agree to our Privacy Policy and consent to biometric processing.";
 
@@ -47,6 +49,9 @@
 "koraidv.selfie.title" = "Selfie";
 "koraidv.selfie.face_camera" = "Face the camera";
 "koraidv.selfie.neutral" = "Keep a neutral expression";
+"koraidv.selfie.remove_glasses" = "Remove eyeglasses for the best match";
+"koraidv.selfie.remove_sunglasses" = "Remove sunglasses — your eyes must be clearly visible";
+"koraidv.selfie.eyes_blocked_title" = "We can't see your eyes";
 "koraidv.selfie.hold_still" = "Hold still...";
 "koraidv.selfie.detecting" = "Detecting face...";
 "koraidv.selfie.help.position" = "Fill the oval with your face and hold still — we capture automatically.";

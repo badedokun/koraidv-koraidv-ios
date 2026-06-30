@@ -10,6 +10,9 @@ struct SelfieCaptureView: View {
     /// when set. Defaults to false to preserve existing minimal-icon UI
     /// for callers that don't opt in.
     var showVisualGuides: Bool = false
+    /// Phase 1 eyeglasses policy — coach the user to remove glasses for a
+    /// more reliable face match. Defaults to true.
+    var showEyewearGuidance: Bool = true
 
     @StateObject private var viewModel = SelfieCaptureViewModel()
     @State private var showReview = false
@@ -70,6 +73,22 @@ struct SelfieCaptureView: View {
                     .font(.system(size: 15))
                     .foregroundColor(.white.opacity(0.5))
                     .padding(.top, 4)
+
+                // Eyeglasses coaching (Phase 1 of the eyeglasses policy). The
+                // issued ID portrait is glasses-free by government standard, so a
+                // glasses-free selfie maximizes match reliability. Soft prompt,
+                // not a hard gate.
+                if showEyewearGuidance {
+                    HStack(spacing: 6) {
+                        Image(systemName: "eyeglasses")
+                            .font(.system(size: 14))
+                        Text(L10n.tr("koraidv.selfie.remove_glasses"))
+                            .font(.system(size: 13, weight: .medium))
+                    }
+                    .foregroundColor(KoraColors.Teal)
+                    .padding(.top, 6)
+                    .accessibilityElement(children: .combine)
+                }
 
                 // Visual guidance illustration (REQ-003 / BanffPay v1.9.6 ②B —
                 // BanffPay explicitly asked for the visual guidance to stay).
@@ -148,6 +167,40 @@ struct SelfieCaptureView: View {
                         .font(.system(size: 15))
                         .foregroundColor(.white)
                 }
+            }
+
+            // Eye-visibility rejection (sunglasses / tinted / mirrored lenses).
+            // A prominent, persistent reason — NOT the transient guidance pill —
+            // that pauses auto-capture until the user removes the glasses and
+            // taps Retake, so the rejection is unambiguous and never loops.
+            if let reason = viewModel.rejectionReason {
+                Color.black.opacity(0.88).ignoresSafeArea()
+                VStack(spacing: 16) {
+                    Image(systemName: "eye.slash.fill")
+                        .font(.system(size: 46, weight: .semibold))
+                        .foregroundColor(KoraColors.Teal)
+                    Text(L10n.tr("koraidv.selfie.eyes_blocked_title"))
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                    Text(reason)
+                        .font(.system(size: 15))
+                        .foregroundColor(.white.opacity(0.85))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                    Button(action: { viewModel.clearRejectionAndRetake() }) {
+                        Text(L10n.tr("koraidv.selfie.retake"))
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(KoraColors.Teal)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+                    .padding(.horizontal, 32)
+                    .padding(.top, 8)
+                }
+                .padding(.horizontal, 24)
             }
         }
         .background(KoraColors.DarkBg)
@@ -251,6 +304,19 @@ class SelfieCaptureViewModel: ObservableObject {
     @Published var isProcessing = false
     @Published var captureProgress: Float = 0
 
+    /// Set when a capture is rejected for eye visibility (sunglasses / tinted /
+    /// mirrored lenses). Drives the prominent rejection overlay and PAUSES
+    /// auto-capture (we deliberately do not re-arm) until the user removes the
+    /// glasses and taps Retake — so the same reject can't loop-fire.
+    @Published var rejectionReason: String?
+
+    /// Dismiss the eye-visibility rejection and re-arm capture.
+    func clearRejectionAndRetake() {
+        rejectionReason = nil
+        feedbackMessage = nil
+        selfieCapture.resetForRetake()
+    }
+
     /// True only when a face is present AND there's no outstanding coaching —
     /// i.e. the face is correctly positioned and the SDK is ready to capture.
     /// Drives the green oval so the colour is a trustworthy "you're set" signal.
@@ -293,6 +359,23 @@ extension SelfieCaptureViewModel: SelfieCaptureDelegate {
     }
 
     func selfieCapture(_ capture: SelfieCapture, didCapture imageData: Data) {
+        // **Enforce eye visibility (sunglasses policy, BanffPay 2026-06-30).**
+        // Reject sunglasses / tinted / reflective lenses before the selfie is
+        // accepted — the SDK does not rely on the user removing them. On reject,
+        // surface coaching and re-arm auto-capture instead of going to review.
+        if let image = UIImage(data: imageData) {
+            let eyes = EyeVisibilityChecker.check(image)
+            if eyes.rejects {
+                DispatchQueue.main.async {
+                    self.isProcessing = false
+                    self.rejectionReason = eyes.message
+                    // Do NOT re-arm here — the prominent overlay requires the
+                    // user to remove the glasses and tap Retake, so we never
+                    // loop-capture the same rejection.
+                }
+                return
+            }
+        }
         DispatchQueue.main.async {
             self.isProcessing = false
             self.onCapture?(imageData)

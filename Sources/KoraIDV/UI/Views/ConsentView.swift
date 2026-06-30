@@ -82,6 +82,16 @@ struct ConsentView: View {
                             title: L10n.tr("koraidv.consent.item.liveness.title"),
                             subtitle: L10n.tr("koraidv.consent.item.liveness.subtitle")
                         )
+                        // Eyewear requirement — sunglasses / tinted / mirrored
+                        // lenses are enforced (rejected) at capture, so surface
+                        // it up front on the SDK's first screen (BanffPay 2026-06-30).
+                        ConsentItem(
+                            iconName: "eyeglasses",
+                            iconBg: KoraColors.WarningAmberLight,
+                            iconTint: KoraColors.WarningAmber,
+                            title: L10n.tr("koraidv.consent.item.eyewear.title"),
+                            subtitle: L10n.tr("koraidv.consent.item.eyewear.subtitle")
+                        )
                     }
                 }
                 .padding(.horizontal, 24)
