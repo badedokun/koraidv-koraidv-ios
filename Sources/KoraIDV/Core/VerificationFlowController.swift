@@ -194,21 +194,7 @@ final class VerificationFlowController {
     private func proceedToDocumentCapture() {
         guard let documentType = selectedDocumentType else { return }
         currentStep = .documentFront
-
-        let captureView = DocumentCaptureView(
-            documentType: documentType,
-            side: .front,
-            theme: configuration.theme,
-            onCapture: { [weak self] imageData in
-                self?.handleDocumentCapture(imageData: imageData, side: .front)
-            },
-            onCancel: { [weak self] in
-                self?.cancel()
-            },
-            showVisualGuides: configuration.showVisualGuides
-        )
-
-        pushView(captureView)
+        pushDocumentCapture(documentType: documentType, side: .front)
     }
 
     private func handleDocumentCapture(imageData: Data, side: DocumentSide) {
@@ -275,12 +261,25 @@ final class VerificationFlowController {
     }
 
     private func showDocumentBackCapture(documentType: DocumentType) {
+        pushDocumentCapture(documentType: documentType, side: .back)
+    }
+
+    /// Push the ML-Kit-backed document-capture screen.
+    ///
+    /// Gated on `canImport(MLKitTextRecognition)` so the SPM unit-test target
+    /// builds: `DocumentCaptureView` (and its `DocumentScanner`) depend on
+    /// Google ML Kit, which is CocoaPods-only and excluded from the SPM target.
+    /// Under CocoaPods the real screen is pushed; under SPM (no ML Kit) this is
+    /// a no-op — the document step is never exercised by the test target (no
+    /// camera). See Package.swift's `exclude` list + README install notes.
+    #if canImport(MLKitTextRecognition)
+    private func pushDocumentCapture(documentType: DocumentType, side: DocumentSide) {
         let captureView = DocumentCaptureView(
             documentType: documentType,
-            side: .back,
+            side: side,
             theme: configuration.theme,
             onCapture: { [weak self] imageData in
-                self?.handleDocumentCapture(imageData: imageData, side: .back)
+                self?.handleDocumentCapture(imageData: imageData, side: side)
             },
             onCancel: { [weak self] in
                 self?.cancel()
@@ -290,6 +289,11 @@ final class VerificationFlowController {
 
         pushView(captureView)
     }
+    #else
+    private func pushDocumentCapture(documentType: DocumentType, side: DocumentSide) {
+        KoraIDV.log("Document capture unavailable: ML Kit not linked (SPM test build)")
+    }
+    #endif
 
     /// Determine whether to show NFC step or proceed to selfie after document capture
     private func proceedAfterDocumentCapture() {

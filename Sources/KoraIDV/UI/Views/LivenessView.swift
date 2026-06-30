@@ -32,15 +32,14 @@ struct LivenessView: View {
     }
 
     var body: some View {
-        ZStack {
-            // Camera preview
-            LivenessCameraPreviewView(livenessManager: viewModel.livenessManager)
-                .ignoresSafeArea()
-                .accessibilityLabel("Front camera for liveness check")
-                .accessibilityAddTraits(.isImage)
-
-            Color.black.opacity(0.4)
-                .ignoresSafeArea()
+        // Oval-WINDOW liveness (BanffPay v1.9.6 iOS alignment fix, 2026-06-29) —
+        // the camera is clipped to a large centred oval (matches Android), so the
+        // face fills the oval regardless of how close the phone is held, instead
+        // of overflowing a small outline drawn over a full-screen preview.
+        let ovalW: CGFloat = 280
+        let ovalH: CGFloat = 350
+        return ZStack {
+            Color.black.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 // Progress bar (step 5/5, dark)
@@ -85,26 +84,34 @@ struct LivenessView: View {
                 // viewport (Stratum Remit 2026-06-06 report: "grey oval
                 // never turns green").
                 ZStack {
-                    // Background oval — color reflects face state
+                    // Camera clipped to the oval window — the face fills it.
+                    LivenessCameraPreviewView(livenessManager: viewModel.livenessManager)
+                        .frame(width: ovalW, height: ovalH)
+                        .clipShape(Ellipse())
+                        .accessibilityLabel("Front camera for liveness check")
+                        .accessibilityAddTraits(.isImage)
+
+                    // Border — green when the face is detected/in range.
                     Ellipse()
-                        .stroke(viewModel.isFaceDetected ? Color.green : Color.white.opacity(0.2), lineWidth: 3)
-                        .frame(width: 240, height: 300)
+                        .stroke(viewModel.isFaceDetected ? Color.green : Color.white.opacity(0.5), lineWidth: 4)
+                        .frame(width: ovalW, height: ovalH)
                         .animation(.easeInOut(duration: 0.2), value: viewModel.isFaceDetected)
 
-                    // Progress ring
-                    Ellipse()
-                        .trim(from: 0, to: CGFloat(viewModel.challengeProgress))
-                        .stroke(KoraColors.Teal, lineWidth: 5)
-                        .frame(width: 248, height: 308)
-                        .rotationEffect(.degrees(-90))
-                        .animation(.linear(duration: 0.1), value: viewModel.challengeProgress)
-                        .accessibilityLabel("Challenge progress")
-                        .accessibilityValue("\(Int(viewModel.challengeProgress * 100)) percent")
+                    // **Progress ring removed (BanffPay 2026-06-29).** The
+                    // circumferential teal `.trim` ring swept around the oval
+                    // as `challengeProgress` went 0→1. For a fast gesture like
+                    // smile that sweep completes near-instantly and reads as a
+                    // quick "swirl" right at challenge completion — the exact
+                    // swirl we'd already removed from the selfie. Completion is
+                    // still clearly signalled by the green checkmark overlay +
+                    // medium haptic below, and in-gesture coaching by the
+                    // dynamic guidance line under the oval, so the sweep is
+                    // redundant. Keeping the oval calm: camera + steady border.
 
                     // Countdown badge (only fires once face is detected)
                     if viewModel.countdown > 0 {
                         CountdownBadge(count: viewModel.countdown)
-                            .offset(y: -130)
+                            .offset(y: -(ovalH / 2) + 44)
                             .accessibilityLabel("Starting in \(viewModel.countdown)")
                     }
 

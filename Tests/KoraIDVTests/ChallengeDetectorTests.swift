@@ -212,13 +212,13 @@ final class ChallengeDetectorTests: XCTestCase {
 
     // MARK: - Turn Left Detection Tests
 
-    func testTurnLeftDetectedWithPositiveYawDelta() {
+    func testTurnLeftDetectedWithNegativeYawDelta() {
         // First frame establishes baseline yaw
         let baselineFace = makeFace(yaw: 0.0, landmarks: makeLandmarks())
         _ = detector.process(face: baselineFace, challengeType: .turnLeft)
 
-        // Subsequent frames with yaw delta > 0.25
-        let turnedFace = makeFace(yaw: 0.4, landmarks: makeLandmarks())
+        // Subsequent frames with NEGATIVE yaw delta past threshold (LEFT = -delta)
+        let turnedFace = makeFace(yaw: -0.4, landmarks: makeLandmarks())
         for _ in 0..<5 {
             _ = detector.process(face: turnedFace, challengeType: .turnLeft)
         }
@@ -232,7 +232,7 @@ final class ChallengeDetectorTests: XCTestCase {
         _ = detector.process(face: baselineFace, challengeType: .turnLeft)
 
         // yaw delta of 0.1 is below the 0.25 threshold
-        let slightTurn = makeFace(yaw: 0.1, landmarks: makeLandmarks())
+        let slightTurn = makeFace(yaw: -0.1, landmarks: makeLandmarks())
         for _ in 0..<10 {
             let result = detector.process(face: slightTurn, challengeType: .turnLeft)
             XCTAssertFalse(result.completed)
@@ -249,11 +249,11 @@ final class ChallengeDetectorTests: XCTestCase {
 
     // MARK: - Turn Right Detection Tests
 
-    func testTurnRightDetectedWithNegativeYawDelta() {
+    func testTurnRightDetectedWithPositiveYawDelta() {
         let baselineFace = makeFace(yaw: 0.0, landmarks: makeLandmarks())
         _ = detector.process(face: baselineFace, challengeType: .turnRight)
 
-        let turnedFace = makeFace(yaw: -0.4, landmarks: makeLandmarks())
+        let turnedFace = makeFace(yaw: 0.4, landmarks: makeLandmarks())
         for _ in 0..<5 {
             _ = detector.process(face: turnedFace, challengeType: .turnRight)
         }
@@ -262,12 +262,12 @@ final class ChallengeDetectorTests: XCTestCase {
         XCTAssertTrue(result.completed)
     }
 
-    func testTurnRightNotDetectedWithPositiveYawDelta() {
+    func testTurnRightNotDetectedWithNegativeYawDelta() {
         let baselineFace = makeFace(yaw: 0.0, landmarks: makeLandmarks())
         _ = detector.process(face: baselineFace, challengeType: .turnRight)
 
-        // Positive yaw delta should not trigger turnRight
-        let wrongDirection = makeFace(yaw: 0.4, landmarks: makeLandmarks())
+        // Negative yaw delta is the wrong direction for turnRight (RIGHT = +delta)
+        let wrongDirection = makeFace(yaw: -0.4, landmarks: makeLandmarks())
         for _ in 0..<10 {
             let result = detector.process(face: wrongDirection, challengeType: .turnRight)
             XCTAssertFalse(result.completed)
@@ -425,7 +425,7 @@ final class ChallengeDetectorTests: XCTestCase {
         let baselineFace = makeFace(yaw: 0.0, landmarks: makeLandmarks())
         _ = detector.process(face: baselineFace, challengeType: .turnLeft)
 
-        let turnedFace = makeFace(yaw: 0.4, landmarks: makeLandmarks())
+        let turnedFace = makeFace(yaw: -0.4, landmarks: makeLandmarks())
         for _ in 0..<5 {
             _ = detector.process(face: turnedFace, challengeType: .turnLeft)
         }
@@ -448,7 +448,7 @@ final class ChallengeDetectorTests: XCTestCase {
         let baselineFace = makeFace(yaw: 0.0, landmarks: makeLandmarks())
         _ = detector.process(face: baselineFace, challengeType: .turnLeft)
 
-        let turnedFace = makeFace(yaw: 0.4, landmarks: makeLandmarks())
+        let turnedFace = makeFace(yaw: -0.4, landmarks: makeLandmarks())
         for _ in 0..<6 {
             _ = detector.process(face: turnedFace, challengeType: .turnLeft)
         }
@@ -468,7 +468,7 @@ final class ChallengeDetectorTests: XCTestCase {
         let baselineFace = makeFace(yaw: 0.0, landmarks: makeLandmarks())
         _ = detector.process(face: baselineFace, challengeType: .turnLeft)
 
-        let turnedFace = makeFace(yaw: 0.4, landmarks: makeLandmarks())
+        let turnedFace = makeFace(yaw: -0.4, landmarks: makeLandmarks())
 
         // After 4 consecutive detections, should NOT be completed
         for _ in 0..<4 {
@@ -483,7 +483,7 @@ final class ChallengeDetectorTests: XCTestCase {
         let baselineFace = makeFace(yaw: 0.0, landmarks: makeLandmarks())
         _ = detector.process(face: baselineFace, challengeType: .turnLeft)
 
-        let turnedFace = makeFace(yaw: 0.4, landmarks: makeLandmarks())
+        let turnedFace = makeFace(yaw: -0.4, landmarks: makeLandmarks())
 
         // Process exactly 3 frames after baseline (so we have 3 consecutive trues)
         for _ in 0..<3 {
@@ -496,32 +496,32 @@ final class ChallengeDetectorTests: XCTestCase {
                        "4 consecutive detections should not be enough; 5 are required")
     }
 
-    func testInterruptedConsecutiveDetectionsResetProgress() {
+    func testTurnLatchesThroughMomentaryNeutralDip() {
+        // **Fast-turn latch (BanffPay iOS, 2026-06-16).** Once a turn crosses
+        // the threshold in the correct direction, `turnDetected` LATCHES true
+        // for the rest of the challenge, so a quick turn that snaps back toward
+        // neutral (or drops a frame to motion blur) still accumulates the 5
+        // consecutive detections and completes. A momentary neutral dip AFTER
+        // the turn is observed therefore does NOT reset progress — that's the
+        // whole point of the latch. (Before the latch this test asserted the
+        // opposite; the detector's behavior was deliberately changed.)
         let baselineFace = makeFace(yaw: 0.0, landmarks: makeLandmarks())
         _ = detector.process(face: baselineFace, challengeType: .turnLeft)
 
-        let turnedFace = makeFace(yaw: 0.4, landmarks: makeLandmarks())
-        let neutralFace = makeFace(yaw: 0.1, landmarks: makeLandmarks())
+        let turnedFace = makeFace(yaw: -0.4, landmarks: makeLandmarks())
+        let neutralFace = makeFace(yaw: -0.1, landmarks: makeLandmarks())
 
-        // 3 consecutive positive detections
-        for _ in 0..<3 {
-            _ = detector.process(face: turnedFace, challengeType: .turnLeft)
-        }
-
-        // Interrupt with a negative detection
+        // Observe the turn, dip briefly back toward neutral, then continue.
+        _ = detector.process(face: turnedFace, challengeType: .turnLeft)
         _ = detector.process(face: neutralFace, challengeType: .turnLeft)
-
-        // 3 more positive detections (total 3 consecutive, not 5)
         for _ in 0..<3 {
             _ = detector.process(face: turnedFace, challengeType: .turnLeft)
         }
 
         let result = detector.process(face: turnedFace, challengeType: .turnLeft)
-        // The last 5 frames are: neutral(false), turned, turned, turned, turned
-        // That's 4 out of 5 in the last 5 => consecutive count = 4 (filter counts all trues)
-        // Actually the code does: recentDetections.filter { $0 }.count, not strict consecutive
-        // So 4 trues out of 5 => progress = 0.8, not completed
-        XCTAssertFalse(result.completed)
+        // Latched: every frame after the first crossing reports detected, so the
+        // 5-frame gate fills and the challenge completes despite the dip.
+        XCTAssertTrue(result.completed)
     }
 
     // MARK: - Progress Tests
@@ -544,7 +544,7 @@ final class ChallengeDetectorTests: XCTestCase {
         let baselineFace = makeFace(yaw: 0.0, landmarks: makeLandmarks())
         _ = detector.process(face: baselineFace, challengeType: .turnLeft)
 
-        let turnedFace = makeFace(yaw: 0.4, landmarks: makeLandmarks())
+        let turnedFace = makeFace(yaw: -0.4, landmarks: makeLandmarks())
 
         var previousProgress: Float = 0.0
         for i in 0..<5 {
@@ -578,7 +578,7 @@ final class ChallengeDetectorTests: XCTestCase {
         let baselineFace = makeFace(yaw: 0.0, landmarks: makeLandmarks())
         _ = detector.process(face: baselineFace, challengeType: .turnLeft)
 
-        let edgeFace = makeFace(yaw: 0.17, landmarks: makeLandmarks())
+        let edgeFace = makeFace(yaw: -0.17, landmarks: makeLandmarks())
         for _ in 0..<10 {
             let result = detector.process(face: edgeFace, challengeType: .turnLeft)
             XCTAssertFalse(result.completed,
@@ -632,8 +632,8 @@ final class ChallengeDetectorTests: XCTestCase {
         let neutralFace = makeFace(yaw: 0.0, landmarks: makeLandmarks())
         _ = detector.process(face: neutralFace, challengeType: .turnRight)
 
-        // For turn_right, positive yaw delta means wrong direction.
-        let turnedLeft = makeFace(yaw: 0.4, landmarks: makeLandmarks())
+        // For turn_right, NEGATIVE yaw delta (a left turn) is the wrong direction.
+        let turnedLeft = makeFace(yaw: -0.4, landmarks: makeLandmarks())
         for _ in 0..<10 {
             let result = detector.process(face: turnedLeft, challengeType: .turnRight)
             XCTAssertFalse(result.completed)
@@ -644,7 +644,7 @@ final class ChallengeDetectorTests: XCTestCase {
         let neutralFace = makeFace(yaw: 0.0, landmarks: makeLandmarks())
         _ = detector.process(face: neutralFace, challengeType: .turnLeft)
 
-        let turnedRight = makeFace(yaw: -0.4, landmarks: makeLandmarks())
+        let turnedRight = makeFace(yaw: 0.4, landmarks: makeLandmarks())
         for _ in 0..<10 {
             let result = detector.process(face: turnedRight, challengeType: .turnLeft)
             XCTAssertFalse(result.completed)
@@ -666,7 +666,7 @@ final class ChallengeDetectorTests: XCTestCase {
         // so initialYaw is NOT snapshotted. Detector waits. User returns to
         // neutral; baseline is then snapshotted at ~0. Subsequent rightward
         // motion would have to be a real right turn to satisfy the threshold.
-        let prePositionedLeft = makeFace(yaw: 0.4, landmarks: makeLandmarks())
+        let prePositionedLeft = makeFace(yaw: -0.4, landmarks: makeLandmarks())
         // 5 frames of pre-positioned yaw — pre-fix would have snapshotted on
         // frame 1; post-fix waits for neutral.
         for _ in 0..<5 {
@@ -708,20 +708,23 @@ final class ChallengeDetectorTests: XCTestCase {
 
     func testBaselineFallbackAfter30FramesWhenUserCantReachNeutral() {
         // Some users genuinely can't get to true neutral (e.g. they sit
-        // off-center from the phone). The fallback engages after 30 frames
-        // (~1 second at 30 fps) so the challenge still completes for them.
+        // off-center from the phone). The neutral-wait fallback engages once
+        // the wait counter reaches baselineMaxWaitFrames (30) so the challenge
+        // still completes for them.
         //
-        // Setup: user holds head slightly off-neutral (yaw = 0.2 — outside
-        // the 0.087 tolerance) for 30 frames. Then makes a real right turn
-        // (yaw goes negative past threshold relative to baseline).
-        let offNeutralFace = makeFace(yaw: 0.2, landmarks: makeLandmarks())
-        for _ in 0..<30 {
+        // The baseline snapshots on the frame where the counter *reaches* 30 —
+        // i.e. the 31st off-neutral frame — so hold the off-neutral pose for 31
+        // frames to anchor the baseline there (yaw = -0.2, outside the 0.087
+        // tolerance). Holding only 30 frames would snapshot the baseline on the
+        // first real-turn frame instead, giving delta 0.
+        let offNeutralFace = makeFace(yaw: -0.2, landmarks: makeLandmarks())
+        for _ in 0..<31 {
             _ = detector.process(face: offNeutralFace, challengeType: .turnRight)
         }
 
-        // After 30 frames, fallback snapshots initialYaw at 0.2.
-        // Now user turns right: yaw = -0.2, delta = -0.4, satisfies threshold.
-        let realRightTurn = makeFace(yaw: -0.2, landmarks: makeLandmarks())
+        // Baseline now anchored at -0.2. A real right turn (yaw +0.2) gives
+        // delta = +0.4, past the +0.17 turnRight threshold (RIGHT = +delta).
+        let realRightTurn = makeFace(yaw: 0.2, landmarks: makeLandmarks())
         for _ in 0..<5 {
             _ = detector.process(face: realRightTurn, challengeType: .turnRight)
         }

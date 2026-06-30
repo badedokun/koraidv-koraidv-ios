@@ -52,7 +52,7 @@ final class KoraIDVTests: XCTestCase {
         // Pinned by `scripts/release-*-sdk.sh` workflow; bumped in lockstep
         // with the podspec + Package.swift. If this fails the SDK was
         // tagged without bumping `KoraIDV.version` — release was incomplete.
-        XCTAssertEqual(KoraIDV.version, "1.6.3")
+        XCTAssertEqual(KoraIDV.version, "1.9.7")
     }
 
     // MARK: - Double Configure

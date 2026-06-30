@@ -49,6 +49,8 @@
 "koraidv.selfie.neutral" = "Keep a neutral expression";
 "koraidv.selfie.hold_still" = "Hold still...";
 "koraidv.selfie.detecting" = "Detecting face...";
+"koraidv.selfie.help.position" = "Fill the oval with your face and hold still — we capture automatically.";
+"koraidv.selfie.help.ready" = "Looking good — hold still while we capture.";
 "koraidv.selfie.processing" = "Processing...";
 "koraidv.selfie.review.title" = "Does this look like you?";
 "koraidv.selfie.review.subtitle" = "Check clarity and lighting";

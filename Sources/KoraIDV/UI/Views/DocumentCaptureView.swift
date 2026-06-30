@@ -41,15 +41,15 @@ struct DocumentCaptureView: View {
 
     private var documentCaptureView: some View {
         ZStack {
-            // Camera preview
-            CameraPreviewView(cameraManager: viewModel.cameraManager)
-                .ignoresSafeArea()
-                .accessibilityLabel("Camera viewfinder")
-                .accessibilityAddTraits(.isImage)
-
-            // Dark overlay
-            Color.black.opacity(0.4)
-                .ignoresSafeArea()
+            // **Card-WINDOW capture (BanffPay v1.9.6 iOS alignment fix,
+            // 2026-06-29).** The camera is no longer a full-screen preview with
+            // a small card OUTLINE drawn over it (which let the document overflow
+            // the outline — Olabode "document falls outside the guide"). Instead
+            // the camera is clipped INTO the ID-1 card frame inside
+            // `documentViewfinder`, exactly like Android, so whatever the user
+            // holds fills the window and can't fall outside it. Background is a
+            // flat dark fill.
+            Color.black.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 // Progress bar (step 3/5, dark)
@@ -146,7 +146,19 @@ struct DocumentCaptureView: View {
             let frameHeight = maxWidth / 1.586
 
             ZStack {
-                // Document frame
+                // Camera clipped INTO the ID-1 card window (1.586:1) — the
+                // document the user holds fills the window, mirroring Android's
+                // `aspectRatio(1.586).clip(...)` preview. Detection still runs
+                // on the full camera frame and capture is the full-res still
+                // cropped to the detected document bbox; this clip is a framing
+                // aid only.
+                CameraPreviewView(cameraManager: viewModel.cameraManager)
+                    .frame(width: maxWidth, height: frameHeight)
+                    .clipShape(RoundedRectangle(cornerRadius: 20))
+                    .accessibilityLabel("Camera viewfinder")
+                    .accessibilityAddTraits(.isImage)
+
+                // Document frame border
                 RoundedRectangle(cornerRadius: 20)
                     .stroke(
                         viewModel.isDocumentDetected ? KoraColors.Teal : Color.white.opacity(0.3),
@@ -170,9 +182,9 @@ struct DocumentCaptureView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 16))
                 }
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(height: 250)
+        .frame(height: 260)
     }
 
     // MARK: - Review View
@@ -349,36 +361,11 @@ struct CornerShape: Shape {
 }
 
 // MARK: - Camera Preview View
-
-/// SwiftUI bridge to the AVFoundation camera preview.
-///
-/// v1.8.6: rewritten to use `CameraPreviewUIView` (see CameraManager.swift),
-/// whose root layer IS an `AVCaptureVideoPreviewLayer`. UIKit's layout system
-/// resizes the layer automatically as the SwiftUI parent resolves geometry.
-///
-/// The previous pattern (`UIView(frame: .zero)` + `addSublayer` + manual
-/// frame management in `updateUIView`) left the preview layer at zero-size
-/// because `updateUIView` doesn't fire on initial bounds resolution — every
-/// document/selfie/liveness preview rendered dark to the user. See the
-/// `CameraPreviewUIView` docstring for the full root cause.
-///
-/// Reused by `SelfieCaptureView` — fixing this struct fixes selfie preview
-/// automatically (it's the same UIViewRepresentable).
-struct CameraPreviewView: UIViewRepresentable {
-    let cameraManager: CameraManager
-
-    func makeUIView(context: Context) -> CameraPreviewUIView {
-        let view = CameraPreviewUIView()
-        view.videoPreviewLayer.session = cameraManager.captureSession
-        view.videoPreviewLayer.videoGravity = .resizeAspectFill
-        return view
-    }
-
-    func updateUIView(_ uiView: CameraPreviewUIView, context: Context) {
-        // No-op: UIKit auto-resizes the preview layer as the view's bounds
-        // change because the layer IS the root layer.
-    }
-}
+//
+// `CameraPreviewView` (the SwiftUI camera-preview wrapper) moved to
+// `Capture/CameraPreviewView.swift` so the SPM unit-test target — which
+// excludes this ML-Kit-dependent file — can still use it from
+// SelfieCaptureView.
 
 // MARK: - View Model
 
@@ -468,6 +455,17 @@ class DocumentCaptureViewModel: ObservableObject {
     /// by the capture-trigger gate in `cameraManager(_:didOutput:)`.
     private var cameraStartedAt: Date?
 
+    /// **Capture cooldown (BanffPay "camera fires multiple times",
+    /// 2026-06-29).** Timestamp of the last auto-capture attempt. A capture
+    /// that fails the post-shot quality check reopens the auto-capture gate
+    /// (`isCapturing=false`, no `hasPendingReview`); if the document is still
+    /// stable the very next frame re-fires immediately, machine-gunning the
+    /// shutter while continuous AF settles. Suppress auto-capture for
+    /// `captureCooldown` after each attempt so the lens can settle and the
+    /// next shot is sharp instead of a rapid burst of soft rejects.
+    private var lastCaptureAttemptAt: Date?
+    private let captureCooldown: TimeInterval = 1.3
+
     func startCapture(detectBarcode: Bool = false, onCapture: @escaping (Data) -> Void) {
         self.onCapture = onCapture
         self.detectBarcodeForCapture = detectBarcode
@@ -517,6 +515,7 @@ class DocumentCaptureViewModel: ObservableObject {
         guard !isCapturing, !hasPendingReview else { return }
         isCapturing = true
         isProcessing = true
+        lastCaptureAttemptAt = Date()
 
         // **v1.9.0-rc6.1** — snapshot the detector's last known
         // bounding box (normalized 0–1) and hand it to CameraManager
@@ -558,7 +557,7 @@ extension DocumentCaptureViewModel: CameraManagerDelegate {
         // runs, whichever gate is appropriate (review for success,
         // deadline reset for failure) is set BEFORE `isCapturing`
         // drops. Single shutter, every time.
-        guard let image = UIImage(data: imageData) else {
+        guard UIImage(data: imageData) != nil else {
             DispatchQueue.main.async {
                 self.isProcessing = false
                 self.isCapturing = false
@@ -568,35 +567,21 @@ extension DocumentCaptureViewModel: CameraManagerDelegate {
             return
         }
 
-        let validation = qualityValidator.validateDocumentImage(image)
-
+        // **Capture once, then review — Android parity (BanffPay "camera fires
+        // multiple times", 2026-06-29).** iOS used to re-run the quality
+        // validator HERE and, on a soft/glare frame, REOPEN the auto-capture
+        // gate (no `hasPendingReview`, `isCapturing=false`, deadline reset) and
+        // let the very next stable frame re-fire — machine-gunning the shutter,
+        // made worse once continuous AF started producing the occasional soft
+        // frame. Android never does this: it captures once and always shows the
+        // review, where the on-screen quality checks + Retake let the user
+        // decide. Match that — always go to review, hold the gate via
+        // `hasPendingReview` until the user retakes.
         DispatchQueue.main.async {
             self.isProcessing = false
-
-            if validation.isValid {
-                // Close the auto-capture gate BEFORE firing onCapture.
-                // The view will switch to review on the callback; while
-                // it does, the camera session is still running and the
-                // detector will still see the document as stable. Without
-                // this gate, the detector re-fires captureManually and
-                // silently replaces the displayed review image. The gate
-                // is released on retake via clearPendingReview().
-                self.hasPendingReview = true
-                self.isCapturing = false
-                self.onCapture?(imageData)
-            } else {
-                // Quality reject path — release the capture gate AND
-                // reset the force-capture deadline. Without the deadline
-                // reset, the very next acceptable detection would see
-                // `elapsed >= forceCaptureDeadline` (because the timer
-                // started 3+ seconds ago, before this failed capture)
-                // and re-fire immediately with the same framing. Reset
-                // forces the user to hold steady for a fresh 3-second
-                // window before another shutter triggers.
-                self.firstDetectedTime = nil
-                self.isCapturing = false
-                self.feedbackMessage = validation.issues.first?.message ?? "Quality check failed"
-            }
+            self.hasPendingReview = true
+            self.isCapturing = false
+            self.onCapture?(imageData)
         }
     }
 
@@ -670,6 +655,13 @@ extension DocumentCaptureViewModel: CameraManagerDelegate {
                 let timeSinceCameraStart = self.cameraStartedAt.map { Date().timeIntervalSince($0) } ?? .infinity
                 let pastSettleDelay = timeSinceCameraStart >= self.cameraSettleDelay
 
+                // Capture cooldown — after an auto-capture attempt, hold off
+                // re-firing for `captureCooldown` so a soft (mid-AF) shot that
+                // failed validation doesn't immediately machine-gun the shutter
+                // before the lens settles (BanffPay "fires multiple times").
+                let sinceLastCapture = self.lastCaptureAttemptAt.map { Date().timeIntervalSince($0) } ?? .infinity
+                let pastCooldown = sinceLastCapture >= self.captureCooldown
+
                 // `result.hasBarcode` (back side) is treated as capture-ready
                 // on its own: a detected PDF417 is a high-confidence
                 // "real document, correctly framed" signal (Vision won't read
@@ -679,8 +671,16 @@ extension DocumentCaptureViewModel: CameraManagerDelegate {
                 // sparse-text back rarely satisfies. The framing-guidance gate
                 // (handled by the early return above) and the 1.5s camera
                 // settle delay still apply, so this can't fire mid-reach.
-                let shouldCapture = (result.isStable || result.hasBarcode || forceCapture) &&
+                // Capture only when focus is LOCKED (not mid-ramp) so the still
+                // is sharp — the key lever for crisp document text. The 3-second
+                // force-capture deadline bypasses this so a device that never
+                // fully settles isn't stuck forever.
+                let focusLocked = !self.cameraManager.isAdjustingFocus
+                let readyAndFocused = (result.isStable || result.hasBarcode) && focusLocked
+
+                let shouldCapture = (readyAndFocused || forceCapture) &&
                                     pastSettleDelay &&
+                                    pastCooldown &&
                                     !self.isCapturing &&
                                     !self.hasPendingReview
 

@@ -253,27 +253,23 @@ extension FaceDetector {
         let faceCenterX = w > 0 ? face.boundingBox.midX / w : 0.5
         let faceCenterY = h > 0 ? face.boundingBox.midY / h : 0.5
 
-        // **Calibrated to on-device readings (BanffPay r7, 2026-06-29).** With
-        // the face perfectly in the oval the DETECTOR reports cx≈0.48, cy≈0.67,
-        // sz≈0.06 — the live-detection frame has a far wider FOV than the saved
-        // still, so the face is MUCH smaller in detection coords (0.06) than it
-        // looks in the capture (~0.17). Every prior band was wrong: a 0.08 size
-        // floor rejected the perfectly-centred face as "too small", pushing the
-        // user closer until the head overflowed; and the centre/spread were off.
-        // Centre on (0.48, 0.67); size band 0.035–0.105 around the measured
-        // 0.06; positional half-axes 0.13 (to be tightened/loosened from the
-        // r6 on-screen readout if needed).
-        // Fitted to three on-device readings (r8): in-oval face spans
-        // cx 0.47–0.61, cy 0.66–0.78, sz 0.06–0.14 (detection coords). Centre on
-        // the centroid (0.52, 0.70) with half-axes 0.13×0.12 so all three points
-        // sit inside; size band 0.04–0.16 spans the measured range.
-        if faceSizeRatio < 0.04 {
-            issues.append("Move closer — fill the oval with your face")
-        } else if faceSizeRatio > 0.16 {
-            issues.append("Move back — fit your whole head in the oval")
+        // **Generalised gate for the oval-WINDOW capture (BanffPay v1.9.6 iOS
+        // alignment fix, 2026-06-29).** The preview is now clipped to a large
+        // centred oval, so a naturally-positioned face is already framed in it
+        // and lands ≈ the centre of the detection frame regardless of device or
+        // how close the phone is held. We therefore drop the per-device
+        // calibration (r7/r8 centroid 0.52/0.70 etc.) — it overfit one tester's
+        // face and broke on others (BanffPay v1.9.6 retest, Olabode) — in favour
+        // of a GENEROUS, centred gate: accept any reasonably-sized, roughly
+        // centred face and let the backend score quality. Centre (0.5, 0.5),
+        // half-axes 0.32; size band 0.03–0.5.
+        if faceSizeRatio < 0.03 {
+            issues.append("Move a little closer")
+        } else if faceSizeRatio > 0.5 {
+            issues.append("Move back a little")
         } else {
-            let dx = (faceCenterX - 0.52) / 0.13
-            let dy = (faceCenterY - 0.70) / 0.12
+            let dx = (faceCenterX - 0.5) / 0.32
+            let dy = (faceCenterY - 0.5) / 0.32
             if dx * dx + dy * dy > 1.0 {
                 issues.append("Center your face in the oval")
             }
@@ -316,10 +312,14 @@ extension FaceDetector {
 
         let faceArea = face.boundingBox.width * face.boundingBox.height
         let ratio = faceArea / imageArea
-        guard ratio >= 0.07, ratio <= 0.65 else { return false }
+        // v1.9.6 oval-window: the camera is clipped to the oval, so a face in
+        // the window is centred in the frame. Keep this gate generous so it
+        // passes for any reasonably-framed face on any device (BanffPay retest,
+        // Olabode — the prior bounds didn't generalise).
+        guard ratio >= 0.04, ratio <= 0.7 else { return false }
 
         let centerX = face.boundingBox.midX / imageSize.width
         let centerY = face.boundingBox.midY / imageSize.height
-        return abs(centerX - 0.5) <= 0.30 && abs(centerY - 0.5) <= 0.30
+        return abs(centerX - 0.5) <= 0.33 && abs(centerY - 0.5) <= 0.33
     }
 }

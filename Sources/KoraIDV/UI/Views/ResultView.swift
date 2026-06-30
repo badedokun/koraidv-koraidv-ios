@@ -5,52 +5,36 @@ import SwiftUI
 struct ProcessingScreen: View {
     let steps: [ProcessingStepItem]
 
-    @State private var outerRotation: Double = 0
-    @State private var innerRotation: Double = 0
-    @State private var coreRotation: Double = 0
+    // Calm "breathing" pulse for the shield badge — a single, slow
+    // opacity fade instead of the old three-ring swirl. (BanffPay
+    // 2026-06-29: the spinning-rings loader read as a jarring "swirl"
+    // after liveness; we already removed the equivalent swirl from the
+    // selfie/liveness ovals. The per-step ProgressView spinners below
+    // carry the "work is happening" signal.)
+    @State private var pulse = false
 
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
 
-            // Spinning rings
+            // Calm static shield badge (no rotation), gentle pulse only.
             ZStack {
-                // Outer ring
                 Circle()
-                    .trim(from: 0.2, to: 0.8)
-                    .stroke(KoraColors.Teal.opacity(0.3), lineWidth: 3)
-                    .frame(width: 120, height: 120)
-                    .rotationEffect(.degrees(outerRotation))
-
-                // Inner ring
+                    .fill(KoraColors.Teal.opacity(0.12))
+                    .frame(width: 96, height: 96)
                 Circle()
-                    .trim(from: 0.3, to: 0.7)
-                    .stroke(KoraColors.Teal.opacity(0.5), lineWidth: 3)
-                    .frame(width: 90, height: 90)
-                    .rotationEffect(.degrees(innerRotation))
-
-                // Core ring
-                Circle()
-                    .trim(from: 0.1, to: 0.9)
-                    .stroke(KoraColors.Teal, lineWidth: 3)
-                    .frame(width: 60, height: 60)
-                    .rotationEffect(.degrees(coreRotation))
-
-                // Shield icon
+                    .stroke(KoraColors.Teal.opacity(0.35), lineWidth: 2)
+                    .frame(width: 96, height: 96)
                 Image(systemName: "shield.checkered")
-                    .font(.system(size: 24))
+                    .font(.system(size: 34))
                     .foregroundColor(KoraColors.Teal)
             }
+            .scaleEffect(pulse ? 1.04 : 0.96)
+            .opacity(pulse ? 1.0 : 0.85)
             .accessibilityHidden(true)
             .onAppear {
-                withAnimation(.linear(duration: 1).repeatForever(autoreverses: false)) {
-                    outerRotation = 360
-                }
-                withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
-                    innerRotation = -360
-                }
-                withAnimation(.linear(duration: 0.8).repeatForever(autoreverses: false)) {
-                    coreRotation = 360
+                withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) {
+                    pulse = true
                 }
             }
 
@@ -78,8 +62,11 @@ struct ProcessingScreen: View {
                                     .font(.system(size: 20))
                                     .foregroundColor(KoraColors.Teal)
                             } else if step.status == .active {
-                                ProgressView()
-                                    .accentColor(KoraColors.Teal)
+                                // Calm pulsing dot instead of the spinning
+                                // iOS ProgressView — the spinner was the last
+                                // remaining "swirl" on the post-liveness screen
+                                // (BanffPay 2026-06-29).
+                                ActiveStepDot()
                             } else {
                                 Circle()
                                     .fill(Color.white.opacity(0.15))
@@ -120,6 +107,27 @@ struct ProcessingStepItem {
 
 enum ProcessingStepStatus {
     case done, active, pending
+}
+
+/// Calm "in progress" indicator for the active processing step — a teal
+/// dot that gently breathes (scale + opacity), with NO rotation. Replaces
+/// the spinning iOS `ProgressView`, which read as a "swirl" after the
+/// liveness check (BanffPay 2026-06-29).
+struct ActiveStepDot: View {
+    @State private var pulse = false
+    var body: some View {
+        Circle()
+            .fill(KoraColors.Teal)
+            .frame(width: 14, height: 14)
+            .scaleEffect(pulse ? 1.0 : 0.6)
+            .opacity(pulse ? 1.0 : 0.5)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                    pulse = true
+                }
+            }
+            .accessibilityHidden(true)
+    }
 }
 
 // MARK: - Success Screen (Screen 11)

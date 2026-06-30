@@ -157,6 +157,14 @@ final class CameraManager: NSObject {
 
         let settings = AVCapturePhotoSettings()
         settings.flashMode = .off
+        // **Freeze handheld motion (BanffPay front-DL sharpness, 2026-06-29).**
+        // Prioritise SPEED, not quality. `.quality` engages multi-frame Deep
+        // Fusion, which fuses several frames over a longer window — on a
+        // handheld document that smears any hand motion and made the text
+        // markedly WORSE. A single fast frame freezes motion and keeps small
+        // text crisp; sharpness comes from focus being locked (gated in the
+        // capture trigger) + good light, not from frame fusion.
+        settings.photoQualityPrioritization = .speed
 
         if let connection = photoOutput.connection(with: .video) {
             connection.videoOrientation = .portrait
@@ -178,6 +186,12 @@ final class CameraManager: NSObject {
         previewLayer = layer
         return layer
     }
+
+    /// True while the lens is actively hunting for focus. The document
+    /// auto-capture waits for this to clear before firing so the still is
+    /// captured with focus LOCKED, not mid-ramp — the main lever for crisp
+    /// document text (BanffPay front-DL sharpness, 2026-06-29).
+    var isAdjustingFocus: Bool { currentDevice?.isAdjustingFocus ?? false }
 
     /// Set focus point
     func focus(at point: CGPoint) {
@@ -257,6 +271,42 @@ final class CameraManager: NSObject {
         captureSession.addInput(input)
         currentDevice = device
         currentPosition = position
+
+        // **Focus/exposure defaults (BanffPay iOS, 2026-06-29).** Without this,
+        // the device kept whatever focus mode it powered up in and the front-DL
+        // text blurred when the user moved CLOSER and never re-sharpened when
+        // they moved back — while Android stayed crisp. Drive continuous
+        // autofocus centred on the frame, and for the close-up DOCUMENT capture
+        // restrict the AF range to NEAR so the lens locks onto a held card fast
+        // instead of hunting toward infinity. Exposure tracks continuously too.
+        do {
+            try device.lockForConfiguration()
+            if device.isFocusModeSupported(.continuousAutoFocus) {
+                device.focusMode = .continuousAutoFocus
+            }
+            if device.isFocusPointOfInterestSupported {
+                device.focusPointOfInterest = CGPoint(x: 0.5, y: 0.5)
+            }
+            // NOTE: smooth-autofocus is intentionally NOT enabled. It makes
+            // focus transitions gradual (good for video recording), but for a
+            // still-document grab it leaves the lens mid-transition for longer,
+            // so an auto-capture that fires during the ramp comes out soft —
+            // which then fails the quality check and re-fires (BanffPay
+            // "camera fires multiple times", 2026-06-29). Decisive AF is better
+            // here; the capture cooldown below also guards against rapid retries.
+            if documentMode && device.isAutoFocusRangeRestrictionSupported {
+                device.autoFocusRangeRestriction = .near
+            }
+            if device.isExposureModeSupported(.continuousAutoExposure) {
+                device.exposureMode = .continuousAutoExposure
+                if device.isExposurePointOfInterestSupported {
+                    device.exposurePointOfInterest = CGPoint(x: 0.5, y: 0.5)
+                }
+            }
+            device.unlockForConfiguration()
+        } catch {
+            KoraIDV.log("Focus/exposure configuration failed: \(error)")
+        }
 
         // Add photo output
         let photo = AVCapturePhotoOutput()
@@ -519,6 +569,19 @@ extension CameraManager: AVCapturePhotoCaptureDelegate {
     private func cropToDocument(_ data: Data) -> Data? {
         guard let originalImage = UIImage(data: data) else { return nil }
 
+        // **Primary path: dewarp to ID-1 (Android parity, 2026-06-29).** Detect
+        // the document quad and perspective-correct it to a frame-filling
+        // 1.586:1 image — robust to tilt, position, size and perspective, and
+        // IDENTICAL for front and back. This replaces the two divergent
+        // bbox-based rectangular crops below (the source of the chronic
+        // front/back framing inconsistency and the clipping/overshoot). Falls
+        // through to the legacy crop only when no convincing quad is found, so
+        // it can only improve framing.
+        if let dewarped = DocumentDewarper.dewarp(originalImage),
+           let jpeg = dewarped.jpegData(compressionQuality: 0.92) {
+            return jpeg
+        }
+
         let imageSize = originalImage.size
         guard imageSize.width > 0, imageSize.height > 0 else { return nil }
 
@@ -541,22 +604,41 @@ extension CameraManager: AVCapturePhotoCaptureDelegate {
             // clip it). The back's text+barcode content under-covers the card,
             // so growing to card aspect + 12% margin recovers the whole card.
             // Deterministic: no detector, no retries.
+            // **Pixel-space, top-anchored crop (BanffPay back-DL review,
+            // 2026-06-29).** Three corrections vs the old heuristic:
+            //   1. TRUE 1.586:1 in PIXELS. The old code set the ratio in 0–1
+            //      fractions then multiplied W and H separately; the portrait
+            //      still (≈3:4) turned a 1.586 *fractional* ratio into ≈1.19:1
+            //      in pixels — squarish, with tablecloth above/below the card.
+            //   2. SIZE from the content WIDTH. The back's barcodes span ≈ the
+            //      card width, so width is the reliable card-size proxy (the
+            //      content HEIGHT under-covers the card); pad out to the white
+            //      card margins.
+            //   3. Anchor the TOP to the content top (≈ the card's top edge —
+            //      the upper barcode sits just below it), NOT the content
+            //      centre. The back's text+barcode live in the UPPER part of
+            //      the card, so a content-centred box clipped the card's BOTTOM
+            //      (the previous attempt overshot the frame).
             let aspect: CGFloat = 1.586
-            let pad: CGFloat = 0.12
-            var rw = max(bbox.width, bbox.height * aspect) * (1 + 2 * pad)
-            var rh = rw / aspect
-            rw = min(rw, 1.0)
-            rh = min(rh, 1.0)
-            var rx = bbox.midX - rw / 2
-            var ry = bbox.midY - rh / 2
-            rx = min(max(0, rx), 1 - rw)
-            ry = min(max(0, ry), 1 - rh)
-            cropRect = CGRect(
-                x: rx * imageSize.width,
-                y: ry * imageSize.height,
-                width: rw * imageSize.width,
-                height: rh * imageSize.height
-            )
+            let pad: CGFloat = 0.18
+            let bw = bbox.width * imageSize.width
+            var cw = bw * (1 + 2 * pad)
+            var ch = cw / aspect
+            if cw > imageSize.width { cw = imageSize.width; ch = cw / aspect }
+            if ch > imageSize.height { ch = imageSize.height; cw = ch * aspect }
+            // Horizontal: anchor to the FRAME centre, not the content centre.
+            // The back's content is barcode-heavy on the RIGHT (big PDF417 + top
+            // barcode), so a content-centred box pulled rightward and clipped
+            // the card's right edge while leaving tablecloth margin on the left.
+            // The card-window preview already guides the user to centre the card
+            // in the frame, so the frame centre is the better anchor.
+            var cropX = (imageSize.width - cw) / 2
+            // Top anchored just above the content top, then a full card height
+            // down — captures the lower half the content doesn't reach.
+            var cropY = bbox.minY * imageSize.height - ch * 0.10
+            cropX = min(max(0, cropX), imageSize.width - cw)
+            cropY = min(max(0, cropY), imageSize.height - ch)
+            cropRect = CGRect(x: cropX, y: cropY, width: cw, height: ch)
         } else if let bbox = documentBbox {
             // **rc6.1 bbox path.** Scale the 0–1 normalized bbox to
             // absolute pixel coordinates on the captured photo, then

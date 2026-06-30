@@ -43,6 +43,8 @@
 "koraidv.selfie.neutral" = "Gardez une expression neutre";
 "koraidv.selfie.hold_still" = "Ne bougez pas...";
 "koraidv.selfie.detecting" = "Détection du visage...";
+"koraidv.selfie.help.position" = "Remplissez l'ovale avec votre visage et ne bougez pas — la capture est automatique.";
+"koraidv.selfie.help.ready" = "Parfait — ne bougez pas pendant la capture.";
 "koraidv.selfie.processing" = "Traitement en cours...";
 "koraidv.selfie.review.title" = "Est-ce que cela vous ressemble ?";
 "koraidv.selfie.review.subtitle" = "Vérifiez la clarté et l'éclairage";

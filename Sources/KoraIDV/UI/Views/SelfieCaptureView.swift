@@ -37,15 +37,17 @@ struct SelfieCaptureView: View {
     // MARK: - Capture View
 
     private var selfieCaptureView: some View {
-        ZStack {
-            // Camera preview
-            CameraPreviewView(cameraManager: viewModel.selfieCapture.cameraManager)
-                .ignoresSafeArea()
-                .accessibilityLabel("Front camera for selfie")
-                .accessibilityAddTraits(.isImage)
-
-            Color.black.opacity(0.4)
-                .ignoresSafeArea()
+        // **Oval-WINDOW capture (BanffPay v1.9.6 iOS alignment fix, 2026-06-29).**
+        // The camera preview is clipped to a large, centred oval — exactly like
+        // Android — so the user's face naturally fills the oval no matter how
+        // close they hold the phone. The previous design (full-screen preview +
+        // a small oval OUTLINE) let a close/large face overflow the outline
+        // ("can't fit my face in the circle"), which no amount of
+        // detection-acceptance tuning could fix because it was the wrong layer.
+        let ovalW: CGFloat = 270
+        let ovalH: CGFloat = 340
+        return ZStack {
+            Color.black.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 // Progress bar (step 4/5, dark)
@@ -56,7 +58,7 @@ struct SelfieCaptureView: View {
                     onClose: onCancel
                 )
 
-                Spacer().frame(height: 16)
+                Spacer().frame(height: 12)
 
                 // Title
                 Text(L10n.tr("koraidv.selfie.face_camera"))
@@ -69,39 +71,38 @@ struct SelfieCaptureView: View {
                     .foregroundColor(.white.opacity(0.5))
                     .padding(.top, 4)
 
+                // Visual guidance illustration (REQ-003 / BanffPay v1.9.6 ②B —
+                // BanffPay explicitly asked for the visual guidance to stay).
                 if showVisualGuides {
                     VisualGuide(kind: .selfie)
-                        .padding(.horizontal, 32)
-                        .padding(.top, 12)
+                        .padding(.horizontal, 56)
+                        .padding(.top, 10)
                 }
 
-                Spacer().frame(height: 24)
+                Spacer(minLength: 12)
 
-                // Oval viewfinder. The FRAME ITSELF is the only detector signal
-                // — NO spinning ring and NO sweeping progress arc (testers found
-                // both distracting; the progress arc cycled because captureProgress
-                // resets on any positioning flicker, BanffPay 2026-06-29). Calm,
-                // motion-free pattern change by state:
-                //   • scanning (no face): thin solid grey line
-                //   • detected, not yet lined up: DASHED teal ("I see you —
-                //     line up in the oval")
-                //   • positioned (isReady): solid, thicker bright teal ("set —
-                //     hold still"); the photo snaps a beat later.
+                // Oval window: camera clipped to the oval; the border is the
+                // calm detector signal (grey → dashed teal → solid teal).
                 ZStack {
+                    CameraPreviewView(cameraManager: viewModel.selfieCapture.cameraManager)
+                        .frame(width: ovalW, height: ovalH)
+                        .clipShape(Ellipse())
+                        .accessibilityLabel("Front camera for selfie")
+                        .accessibilityAddTraits(.isImage)
                     Ellipse()
                         .stroke(
-                            viewModel.isFaceDetected ? KoraColors.Teal : Color.white.opacity(0.3),
+                            viewModel.isReady ? KoraColors.Teal : Color.white.opacity(0.5),
                             style: StrokeStyle(
                                 lineWidth: viewModel.isReady ? 5 : 3,
-                                dash: (viewModel.isFaceDetected && !viewModel.isReady) ? [9, 7] : []
+                                dash: (viewModel.isFaceDetected && !viewModel.isReady) ? [10, 8] : []
                             )
                         )
-                        .frame(width: 240, height: 300)
+                        .frame(width: ovalW, height: ovalH)
                         .animation(.easeInOut(duration: 0.25), value: viewModel.isReady)
                         .animation(.easeInOut(duration: 0.25), value: viewModel.isFaceDetected)
                 }
 
-                Spacer().frame(height: 24)
+                Spacer(minLength: 16)
 
                 // Guidance pill — surfaces the specific positioning/lighting
                 // coaching the detector produces ("Center your face in the oval",
@@ -115,6 +116,22 @@ struct SelfieCaptureView: View {
                             : L10n.tr("koraidv.selfie.detecting")),
                     variant: (viewModel.feedbackMessage == nil && viewModel.isFaceDetected) ? .ready : .scanning
                 )
+
+                // Explicit positioning + encouragement help line (BanffPay
+                // v1.9.6 ②B). Always visible under the pill so the user is
+                // never left without instructions — it tells them WHAT to do
+                // (fill the oval, hold still) and that capture is automatic.
+                Text(viewModel.isReady
+                     ? L10n.tr("koraidv.selfie.help.ready")
+                     : L10n.tr("koraidv.selfie.help.position"))
+                    .font(.system(size: 14))
+                    .foregroundColor(viewModel.isReady
+                                     ? KoraColors.Teal
+                                     : .white.opacity(0.7))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 28)
+                    .padding(.top, 10)
+                    .animation(.easeInOut(duration: 0.2), value: viewModel.isReady)
 
                 Spacer()
             }
