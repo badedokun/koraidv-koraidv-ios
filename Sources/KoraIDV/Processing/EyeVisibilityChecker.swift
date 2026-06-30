@@ -27,7 +27,12 @@ enum EyeVisibilityChecker {
         case obscured       // flat — no eye structure
         case noFace         // no face — let other gates handle it
 
-        var rejects: Bool { self != .clear && self != .noFace }
+        // FAIL CLOSED: anything that isn't a confirmed-clear eye blocks the
+        // capture — including .noFace. The old fail-open on .noFace let
+        // sunglasses through whenever face detection blipped on a frame
+        // (cold first capture / rapid retakes), which is exactly the
+        // "hammer it enough and it slips through" pattern (BanffPay 2026-06-30).
+        var rejects: Bool { self != .clear }
         var message: String { L10n.tr("koraidv.selfie.remove_sunglasses") }
     }
 
@@ -38,10 +43,17 @@ enum EyeVisibilityChecker {
     // Two independent signals separate them with margin: specular fraction
     // (reflections) and saturation ratio (a real eye is ≥ face-skin colour; a
     // neutral reflective/dark lens is much less).
-    private static let darkRatioReject: Double    = 0.62   // eyes < 62% of face brightness → dark lenses
+    // TIGHTENED (BanffPay 2026-06-30, "make it fail closed every time"). The
+    // gate must POSITIVELY confirm a clear eye; the old thresholds let mirrored
+    // lenses slip through under some lighting/angles. Margins are set against the
+    // measured bare-eye band (lumaR 0.88–0.98, bright 0.00, satR 1.13–1.19) so a
+    // real eye still passes, but anything dimmer / more reflective / less colour
+    // than that rejects. (Sunglasses measured at lumaR 0.70, bright 0.06,
+    // satR 0.82 — now caught on all three signals, with headroom for variation.)
+    private static let darkRatioReject: Double    = 0.78   // eyes < 78% of face brightness → lens (was 0.62)
     private static let brightRatioReject: Double  = 1.08   // eyes > 108% of face brightness → bright reflective
-    private static let specularFracReject: Double = 0.035  // ≥3.5% blown-out pixels → mirrored reflections
-    private static let satLowReject: Double       = 0.85   // eye colour << face → neutral reflective/dark lens
+    private static let specularFracReject: Double = 0.025  // ≥2.5% blown-out pixels → reflections (was 0.035)
+    private static let satLowReject: Double       = 0.95   // eye colour < 95% of face → neutral lens (was 0.85)
     private static let satHighReject: Double      = 1.6    // eye colour >> face → colour tint
     private static let satHighAbs: Double         = 0.30   // …and absolutely colourful
     private static let minEyeContrast: Double     = 0.10   // eye-region std below this → flat tint
@@ -51,16 +63,31 @@ enum EyeVisibilityChecker {
     static var lastDebug: String = ""
 
     static func check(_ image: UIImage) -> Outcome {
-        guard let cg = image.cgImage else { return .noFace }
+        guard let cg = image.cgImage else {
+            lastDebug = "eye: no cgImage → reject (fail-closed)"; return .noFace
+        }
         let imageSize = CGSize(width: cg.width, height: cg.height)
 
-        let req = VNDetectFaceLandmarksRequest()
-        let handler = VNImageRequestHandler(cgImage: cg, options: [:])
-        do { try handler.perform([req]) } catch { return .noFace }  // fail-open on error
-
-        guard let face = req.results?.max(by: {
-            ($0.boundingBox.width * $0.boundingBox.height) < ($1.boundingBox.width * $1.boundingBox.height)
-        }) else { return .noFace }
+        // Detect the face, retrying a few times. Vision can transiently return
+        // no result (cold first call, resource pressure) and the captured still
+        // can differ from the settled preview. A real selfie ALWAYS has a face
+        // (capture auto-fired on a stable one), so if we still can't find it the
+        // frame is unusable — we FAIL CLOSED (→ retake) rather than pass it
+        // unchecked.
+        var face: VNFaceObservation?
+        for _ in 0..<3 {
+            let req = VNDetectFaceLandmarksRequest()
+            let handler = VNImageRequestHandler(cgImage: cg, options: [:])
+            do { try handler.perform([req]) } catch { continue }
+            if let f = req.results?.max(by: {
+                ($0.boundingBox.width * $0.boundingBox.height) < ($1.boundingBox.width * $1.boundingBox.height)
+            }) { face = f; break }
+        }
+        guard let face = face else {
+            lastDebug = "eye: no face after retries → reject (fail-closed)"
+            KoraIDV.log(lastDebug)
+            return .noFace
+        }
 
         guard let lm = face.landmarks,
               let leftEye = lm.leftEye, let rightEye = lm.rightEye else {
