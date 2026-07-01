@@ -52,6 +52,7 @@
 "koraidv.selfie.remove_glasses" = "Remove eyeglasses for the best match";
 "koraidv.selfie.remove_sunglasses" = "Remove sunglasses — your eyes must be clearly visible";
 "koraidv.selfie.eyes_blocked_title" = "We can't see your eyes";
+"koraidv.selfie.too_dark" = "Too dark to verify your eyes — please retake in better lighting";
 "koraidv.selfie.hold_still" = "Hold still...";
 "koraidv.selfie.detecting" = "Detecting face...";
 "koraidv.selfie.help.position" = "Fill the oval with your face and hold still — we capture automatically.";

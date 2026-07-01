@@ -26,6 +26,7 @@ enum EyeVisibilityChecker {
         case tinted         // colour tint over the eyes
         case obscured       // flat — no eye structure
         case noFace         // no face — let other gates handle it
+        case tooDark        // scene too dark to confirm eye visibility → retake in light
 
         // FAIL CLOSED: anything that isn't a confirmed-clear eye blocks the
         // capture — including .noFace. The old fail-open on .noFace let
@@ -33,7 +34,12 @@ enum EyeVisibilityChecker {
         // (cold first capture / rapid retakes), which is exactly the
         // "hammer it enough and it slips through" pattern (BanffPay 2026-06-30).
         var rejects: Bool { self != .clear }
-        var message: String { L10n.tr("koraidv.selfie.remove_sunglasses") }
+        var message: String {
+            switch self {
+            case .tooDark: return L10n.tr("koraidv.selfie.too_dark")
+            default:       return L10n.tr("koraidv.selfie.remove_sunglasses")
+            }
+        }
     }
 
     // Tunable thresholds (BanffPay strict mode, 2026-06-30). CALIBRATED from
@@ -57,6 +63,12 @@ enum EyeVisibilityChecker {
     private static let satHighReject: Double      = 1.6    // eye colour >> face → colour tint
     private static let satHighAbs: Double         = 0.30   // …and absolutely colourful
     private static let minEyeContrast: Double     = 0.10   // eye-region std below this → flat tint
+    // Low-light fail-closed (BanffPay night test, 2026-06-30). In the dark the
+    // lens and face are both dim so the brightness RATIO can't separate them and
+    // there are no reflections to catch — the only safe move is to require
+    // enough light to actually see the eyes. Measured: night captures fMean
+    // 0.27–0.28 (both sunglasses AND bare eyes), a usable dim selfie ≈ 0.36.
+    private static let lowLightFloor: Double      = 0.30   // face-region mean luma below this → too dark
 
     /// Last computed metric line — surfaced on the review screen under debug
     /// logging so QA can read real numbers off a screenshot for calibration.
@@ -108,7 +120,9 @@ enum EyeVisibilityChecker {
         let satRatio = eye.satMean / max(faceRef.satMean, 0.01)
 
         let outcome: Outcome
-        if ratio < darkRatioReject {
+        if faceRef.lumaMean < lowLightFloor {
+            outcome = .tooDark                                      // too dark to confirm eyes → retake in light
+        } else if ratio < darkRatioReject {
             outcome = .sunglasses                                   // dark lenses
         } else if ratio > brightRatioReject || eye.brightFraction > specularFracReject {
             outcome = .reflective                                   // bright / mirrored reflections
@@ -123,8 +137,8 @@ enum EyeVisibilityChecker {
         }
 
         lastDebug = String(format:
-            "eye lumaR=%.2f std=%.2f bright=%.2f eyeSat=%.2f faceSat=%.2f satR=%.2f → %@",
-            ratio, eye.lumaStd, eye.brightFraction, eye.satMean, faceRef.satMean, satRatio,
+            "eye lumaR=%.2f std=%.2f bright=%.2f satR=%.2f fMean=%.2f eMean=%.2f → %@",
+            ratio, eye.lumaStd, eye.brightFraction, satRatio, faceRef.lumaMean, eye.lumaMean,
             "\(outcome)")
         KoraIDV.log(lastDebug)
         return outcome

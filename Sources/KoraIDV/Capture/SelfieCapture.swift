@@ -235,16 +235,25 @@ final class SelfieCapture: NSObject {
             faceDetector.isWithinSelfieOval(face: $0, imageSize: result.imageSize)
         } ?? false
 
-        if issues.isEmpty && isAutoCaptureEnabled {
+        // **Hold the shutter unless lighting is adequate (BanffPay low-light
+        // "machine gun", 2026-06-30).** Firing in poor light produced doomed
+        // frames (dim / motion-blurred) that fail quality validation, which
+        // resets isCapturing + the auto-counter and immediately re-fires —
+        // a rapid capture loop in the dark. Gate BOTH the counter path AND the
+        // force-capture on `lightingOK`, so in poor light we surface the
+        // "more light on your face" coaching and wait instead of machine-gunning.
+        // (Too dark to take a usable selfie is a legitimate stop — fail-closed.)
+        let lightingOK = lightingCoaching.isEmpty
+        if issues.isEmpty && lightingOK && isAutoCaptureEnabled {
             autoCaptureCounter += 1
             if autoCaptureCounter >= autoCaptureThreshold && settled && !isCapturing {
                 capture()
             }
-        } else if heldLongEnough && faceInOval && isAutoCaptureEnabled && !isCapturing {
+        } else if heldLongEnough && faceInOval && lightingOK && isAutoCaptureEnabled && !isCapturing {
             // Coached for the full deadline and the face IS in the oval, but a
-            // non-positional issue (e.g. lighting) never cleared — capture
-            // anyway so the user is never stranded (no manual shutter on iOS).
-            // Gating on faceInOval is what prevents the outside-oval selfie.
+            // non-positional issue never cleared — capture anyway so the user is
+            // never stranded. Still gated on lightingOK: a persistent LIGHTING
+            // problem must be fixed with light, not force-captured into a loop.
             capture()
         } else {
             // v1.9.6 (BanffPay): decrement instead of resetting to 0 so a
