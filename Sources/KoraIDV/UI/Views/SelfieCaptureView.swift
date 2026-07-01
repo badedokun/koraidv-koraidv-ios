@@ -359,23 +359,13 @@ extension SelfieCaptureViewModel: SelfieCaptureDelegate {
     }
 
     func selfieCapture(_ capture: SelfieCapture, didCapture imageData: Data) {
-        // **Enforce eye visibility (sunglasses policy, BanffPay 2026-06-30).**
-        // Reject sunglasses / tinted / reflective lenses before the selfie is
-        // accepted — the SDK does not rely on the user removing them. On reject,
-        // surface coaching and re-arm auto-capture instead of going to review.
-        if let image = UIImage(data: imageData) {
-            let eyes = EyeVisibilityChecker.check(image)
-            if eyes.rejects {
-                DispatchQueue.main.async {
-                    self.isProcessing = false
-                    self.rejectionReason = eyes.message
-                    // Do NOT re-arm here — the prominent overlay requires the
-                    // user to remove the glasses and tap Retake, so we never
-                    // loop-capture the same rejection.
-                }
-                return
-            }
-        }
+        // **Eye-visibility (sunglasses policy) is enforced server-side.**
+        // The authoritative gate is a pretrained sunglasses classifier in
+        // koraidv-ml (face-independent), surfaced through identity-service as an
+        // auto-reject. The old on-device luma/specular heuristic overfit a single
+        // face — false-rejecting bare eyes on some users and false-accepting
+        // tinted lenses on others — so we no longer hard-block capture here.
+        // The consent screen still instructs the user to remove sunglasses.
         DispatchQueue.main.async {
             self.isProcessing = false
             self.onCapture?(imageData)
