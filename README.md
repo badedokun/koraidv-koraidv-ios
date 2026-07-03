@@ -406,3 +406,22 @@ class ComplianceImageService {
 ## License
 
 MIT — see [LICENSE](./LICENSE). Copyright © 2026 Korastratum, Inc.
+## Eyewear / Sunglasses Policy
+
+For a valid government-ID selfie the user's **eyes must be visible**. As of
+**v1.10.3** this is enforced **server-side** by the KoraIDV backend, not on the
+device — the SDK no longer hard-blocks capture for eyewear. You do not need to
+do anything to enable it.
+
+**What integrators should expect:**
+- **Opaque sunglasses** → the verification is **auto-rejected** with
+  *"Please remove sunglasses so your eyes are clearly visible, then retake your selfie."*
+- **Bare eyes** (any lighting/background) → proceed normally; never false-rejected.
+- **Mirrored / lightly tinted lenses** → routed to **manual review** (their
+  occluded eyes also lower the face-match score), so they are never silently
+  auto-approved.
+
+The consent screen still instructs users to remove sunglasses before the selfie.
+The reject threshold is operator-tunable server-side via
+`IDV_FLOOR_SUNGLASSES_REJECT` (default `0.70`). Clear prescription glasses are
+allowed — the gate keys on eye occlusion, not on the presence of glasses.

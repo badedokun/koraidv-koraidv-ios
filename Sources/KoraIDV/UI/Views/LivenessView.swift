@@ -91,9 +91,10 @@ struct LivenessView: View {
                         .accessibilityLabel("Front camera for liveness check")
                         .accessibilityAddTraits(.isImage)
 
-                    // Border — green when the face is detected/in range.
+                    // Border — brand color when the face is detected/in range
+                    // (follows the integrator's theme.primaryColor; grey otherwise).
                     Ellipse()
-                        .stroke(viewModel.isFaceDetected ? Color.green : Color.white.opacity(0.5), lineWidth: 4)
+                        .stroke(viewModel.isFaceDetected ? KoraColors.Teal : Color.white.opacity(0.5), lineWidth: 4)
                         .frame(width: ovalW, height: ovalH)
                         .animation(.easeInOut(duration: 0.2), value: viewModel.isFaceDetected)
 
@@ -126,7 +127,7 @@ struct LivenessView: View {
                     if viewModel.showChallengeCompleteCheck {
                         ZStack {
                             Circle()
-                                .fill(Color.green.opacity(0.85))
+                                .fill(KoraColors.SuccessGreen.opacity(0.85))
                                 .frame(width: 100, height: 100)
                             Image(systemName: "checkmark")
                                 .font(.system(size: 50, weight: .bold))

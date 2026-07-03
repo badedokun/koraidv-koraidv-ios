@@ -1,30 +1,56 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
+
+extension Color {
+    /// Returns a darker shade of this color (used to build the primary-button
+    /// gradient from a single themed brand color). Falls back to self if the
+    /// color can't be decomposed (e.g. non-UIKit platforms).
+    func koraDarkened(_ amount: CGFloat) -> Color {
+        #if canImport(UIKit)
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        if UIColor(self).getHue(&h, saturation: &s, brightness: &b, alpha: &a) {
+            return Color(hue: Double(h), saturation: Double(s),
+                         brightness: Double(max(0, b * (1 - amount))), opacity: Double(a))
+        }
+        #endif
+        return self
+    }
+}
 
 // MARK: - Color Tokens
 
 struct KoraColors {
-    static let Teal = Color(hex: "#0D9488")
-    static let TealDark = Color(hex: "#0F766E")
+    // Brand accent — injected from the integrator's KoraTheme.primaryColor at flow
+    // start via applyTheme(_:). Defaults to Kora teal. Every primary button/accent
+    // reads Teal / TealDark / tealGradient, so setting these once re-brands the
+    // whole SDK UI without touching call sites (BanffPay theming, 2026-07-02).
+    static var brandPrimary: Color = Color(hex: "#0D9488")
+    static var brandPrimaryDark: Color = Color(hex: "#0F766E")
+
+    static var Teal: Color { brandPrimary }
+    static var TealDark: Color { brandPrimaryDark }
     static let Cyan = Color(hex: "#06B6D4")
     static let TealBright = Color(hex: "#2DD4BF")
 
-    static let SuccessGreen = Color(hex: "#16A34A")
+    static var SuccessGreen = Color(hex: "#16A34A")
     static let SuccessGreenDark = Color(hex: "#15803D")
     static let SuccessGreenLight = Color(hex: "#DCFCE7")
     static let SuccessGreenBorder = Color(hex: "#BBF7D0")
 
-    static let ErrorRed = Color(hex: "#DC2626")
+    static var ErrorRed = Color(hex: "#DC2626")
     static let ErrorRedDark = Color(hex: "#B91C1C")
     static let ErrorRedLight = Color(hex: "#FEF2F2")
     static let ErrorRedBorder = Color(hex: "#FECACA")
 
-    static let WarningAmber = Color(hex: "#D97706")
+    static var WarningAmber = Color(hex: "#D97706")
     static let WarningAmberDark = Color(hex: "#92400E")
     static let WarningAmberLight = Color(hex: "#FEF3C7")
     static let WarningAmberBorder = Color(hex: "#FDE68A")
     static let WarningYellowLight = Color(hex: "#FEF9C3")
 
-    static let InfoBlue = Color(hex: "#0284C7")
+    static var InfoBlue = Color(hex: "#0284C7")
     static let InfoBlueDark = Color(hex: "#0369A1")
     static let InfoBlueLight = Color(hex: "#E0F2FE")
     static let InfoBlueBorder = Color(hex: "#BAE6FD")
@@ -51,11 +77,27 @@ struct KoraColors {
     static let TextDark = Color(hex: "#333333")
     static let TextSubtle = Color(hex: "#374151")
 
-    static let tealGradient = LinearGradient(
-        colors: [Teal, TealDark],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
+    static var tealGradient: LinearGradient {
+        LinearGradient(
+            colors: [brandPrimary, brandPrimaryDark],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    /// Applies the integrator's theme brand color to the shared design tokens.
+    /// Call once at flow start; every KoraColors.Teal / tealGradient usage follows.
+    static func applyTheme(_ theme: KoraTheme) {
+        brandPrimary = theme.primaryColor
+        brandPrimaryDark = theme.primaryColor.koraDarkened(0.14)
+        // Semantic tokens follow the theme's semantic slots. Their defaults equal
+        // these hardcoded values, so pass/fail stays green/red/amber unless the
+        // integrator explicitly customizes them (BanffPay theming, 2026-07-02).
+        SuccessGreen = theme.successColor
+        ErrorRed = theme.errorColor
+        WarningAmber = theme.warningColor
+        InfoBlue = theme.infoColor
+    }
 
     static let redGradient = LinearGradient(
         colors: [ErrorRed, ErrorRedDark],

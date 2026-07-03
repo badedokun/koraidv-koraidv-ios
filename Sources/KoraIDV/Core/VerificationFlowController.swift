@@ -81,6 +81,10 @@ final class VerificationFlowController {
         self.configuration = configuration
         self.sessionManager = sessionManager
         self.completion = completion
+        // Apply the integrator's brand color to the shared design tokens so every
+        // primary button / accent across the flow follows configuration.theme
+        // (BanffPay theming, 2026-07-02).
+        KoraColors.applyTheme(configuration.theme)
     }
 
     // MARK: - Flow Control
