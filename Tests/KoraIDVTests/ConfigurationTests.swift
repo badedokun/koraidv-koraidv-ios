@@ -135,10 +135,10 @@ final class ConfigurationTests: XCTestCase {
     // MARK: - API Environment URLs
 
     func testProductionEnvironmentBaseURL() {
-        // Routed via the production gateway at api.korastratum.com; the /idv
-        // suffix is the IDV product path on the gateway.
+        // Raw-API-key IDV endpoint (idv.korastratum.com). NOT api.korastratum.com
+        // — that is the console's JWT gateway and rejects raw SDK keys with 401.
         let url = APIEnvironment.production.baseURL
-        XCTAssertEqual(url.absoluteString, "https://api.korastratum.com/api/v1/idv")
+        XCTAssertEqual(url.absoluteString, "https://idv.korastratum.com/api/v1/idv")
     }
 
     func testSandboxEnvironmentBaseURL() {

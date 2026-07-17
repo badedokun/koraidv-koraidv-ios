@@ -166,7 +166,11 @@ public enum APIEnvironment {
     var baseURL: URL {
         switch self {
         case .production:
-            return URL(string: "https://api.korastratum.com/api/v1/idv")!
+            // Raw-API-key IDV endpoint (same model as sandbox: the SDK talks to
+            // identity directly). NOT api.korastratum.com — that is the console's
+            // JWT gateway and rejects raw SDK keys with 401. Overridable per
+            // integration via `Configuration.baseURL` if this ever changes.
+            return URL(string: "https://idv.korastratum.com/api/v1/idv")!
         case .sandbox:
             // Sandbox identity-service in the orokii-platform GCP project.
             // Matches the Android SDK's `Environment.SANDBOX` URL exactly so
