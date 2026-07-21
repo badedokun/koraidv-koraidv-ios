@@ -128,6 +128,12 @@ public enum KoraError: LocalizedError {
     /// Invalid verification state
     case invalidVerificationState(String)
 
+    /// The verification completed with a rejection/failure. `code` is the
+    /// server's stable, machine-readable DecisionCode (e.g. DOCUMENT_UNREADABLE,
+    /// FACE_MISMATCH, REJECTED) — never "UNKNOWN" — and `reason` is the
+    /// human-readable, actionable message. Switch on `errorCode` for the code.
+    case rejected(code: String, reason: String)
+
     // MARK: - Generic Errors
 
     /// Unknown error
@@ -213,6 +219,8 @@ public enum KoraError: LocalizedError {
             return "This verification has already been completed. To begin a new check, call startVerification() with a fresh externalId rather than resuming this one."
         case .invalidVerificationState(let state):
             return "Invalid verification state: \(state)"
+        case .rejected(_, let reason):
+            return reason.isEmpty ? "Verification was not successful. Please try again." : reason
         case .unknown(let message):
             return message
         case .userCancelled:
@@ -279,6 +287,7 @@ public enum KoraError: LocalizedError {
         case .verificationExpired: return "VERIFICATION_EXPIRED"
         case .verificationAlreadyCompleted: return "VERIFICATION_ALREADY_COMPLETED"
         case .invalidVerificationState: return "INVALID_VERIFICATION_STATE"
+        case .rejected(let code, _): return code.isEmpty ? "REJECTED" : code
         case .unknown: return "UNKNOWN"
         case .userCancelled: return "USER_CANCELLED"
         }

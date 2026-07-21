@@ -656,13 +656,18 @@ final class VerificationFlowController {
             }
 
         case .rejected, .failed:
+            // Surface the server's decision reason instead of a generic
+            // "Verification rejected". This carries the actionable message
+            // (e.g. "We couldn't read the photo on your ID — retake it flat…")
+            // so the host app no longer shows an opaque UNKNOWN with no guidance.
+            let rejectionFailure = Self.failure(forRejected: verification)
             if simplified {
                 pushView(SimplifiedFailedScreen(messages: messages) { [weak self] in
-                    self?.finish(with: .failure(.unknown("Verification rejected")))
+                    self?.finish(with: .failure(rejectionFailure))
                 })
             } else {
                 pushView(RejectedScreen(verification: verification) { [weak self] in
-                    self?.finish(with: .failure(.unknown("Verification rejected")))
+                    self?.finish(with: .failure(rejectionFailure))
                 })
             }
 
@@ -725,6 +730,21 @@ final class VerificationFlowController {
         guard isLoadingPresented else { return }
         isLoadingPresented = false
         navigationController?.dismiss(animated: false)
+    }
+
+    /// Builds the failure returned to the host on a rejected/failed verification.
+    /// Maps the server's stable DecisionCode + human reason onto `.rejected`, so
+    /// the host sees a specific errorCode (e.g. DOCUMENT_UNREADABLE, FACE_MISMATCH)
+    /// and an actionable message — never a generic "UNKNOWN" with "Verification
+    /// rejected". Falls back to a generic REJECTED code if the backend predates
+    /// the decisionCode field.
+    private static func failure(forRejected verification: Verification) -> KoraError {
+        let code = verification.decisionCode?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let reason = verification.decisionReason?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return .rejected(
+            code: code.isEmpty ? "REJECTED" : code,
+            reason: reason.isEmpty ? "Verification was not successful. Please try again." : reason
+        )
     }
 
     private func showError(_ error: KoraError) {

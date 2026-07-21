@@ -61,6 +61,11 @@ public struct Verification: Codable {
     /// a country/document-type selection mismatch unrelated to scoring.
     /// Surfaced by Stratum Remit 2026-06-07 cross-doc test matrix.
     public let decisionReason: String?
+
+    /// Stable, machine-readable outcome code (e.g. DOCUMENT_UNREADABLE,
+    /// FACE_MISMATCH, REJECTED) — safe to switch on instead of parsing
+    /// decisionReason. Optional for backward compatibility with older backends.
+    public let decisionCode: String?
 }
 
 /// Verification status
