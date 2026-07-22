@@ -215,6 +215,10 @@ public struct VerificationScores: Codable {
     public let dataConsistency: Double
     public let screening: Double?
     public let overall: Double
+    /// Detail of the name comparison. When `hasExpectedNames` is false, no expected
+    /// name was supplied to compare against, so `nameMatch` is an OCR extraction proxy
+    /// (not a match) and must be shown as "N/A" rather than a percentage.
+    public let nameMatchResult: NameMatchResult?
 
     enum CodingKeys: String, CodingKey {
         case documentQuality
@@ -225,7 +229,15 @@ public struct VerificationScores: Codable {
         case dataConsistency
         case screening = "complianceScore"
         case overall
+        case nameMatchResult
     }
+}
+
+/// Detailed name-comparison result (subset of the backend's NameMatchResult).
+public struct NameMatchResult: Codable {
+    /// Whether an expected name was supplied to compare the document name against.
+    /// False → name match was not evaluated (nameMatch is not a real match score).
+    public let hasExpectedNames: Bool
 }
 
 /// Risk signal

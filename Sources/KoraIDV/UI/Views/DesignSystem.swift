@@ -286,6 +286,9 @@ struct ScoreMetric {
     let iconName: String
     let status: MetricStatus
     var errorMessage: String? = nil
+    /// When true the metric was not evaluated (e.g. name match with no expected name):
+    /// render "N/A" with a neutral style instead of a percentage/pass-fail.
+    var notApplicable: Bool = false
 }
 
 struct ScoreMetricRow: View {
@@ -306,7 +309,7 @@ struct ScoreMetricRow: View {
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(KoraColors.TextPrimary)
                     Spacer()
-                    Text("\(metric.score)%")
+                    Text(metric.notApplicable ? "N/A" : "\(metric.score)%")
                         .font(.system(size: 16, weight: .bold))
                         .foregroundColor(scoreColor)
                 }
@@ -317,7 +320,7 @@ struct ScoreMetricRow: View {
                             .fill(barTrackColor)
                         RoundedRectangle(cornerRadius: 2)
                             .fill(scoreColor)
-                            .frame(width: geo.size.width * CGFloat(metric.score) / 100)
+                            .frame(width: metric.notApplicable ? 0 : geo.size.width * CGFloat(metric.score) / 100)
                     }
                 }
                 .frame(height: 4)
@@ -347,6 +350,7 @@ struct ScoreMetricRow: View {
     }
 
     private var iconBgColor: Color {
+        if metric.notApplicable { return KoraColors.BorderLight }
         switch metric.status {
         case .pass: return KoraColors.SuccessGreenLight
         case .fail: return KoraColors.ErrorRedBorder
@@ -355,6 +359,7 @@ struct ScoreMetricRow: View {
     }
 
     private var iconColor: Color {
+        if metric.notApplicable { return KoraColors.TextSecondary }
         switch metric.status {
         case .pass: return KoraColors.SuccessGreen
         case .fail: return KoraColors.ErrorRed
@@ -363,6 +368,7 @@ struct ScoreMetricRow: View {
     }
 
     private var scoreColor: Color {
+        if metric.notApplicable { return KoraColors.TextSecondary }
         switch metric.status {
         case .pass: return KoraColors.SuccessGreen
         case .fail: return KoraColors.ErrorRed
@@ -678,6 +684,9 @@ struct ReviewBadge: View {
 struct ScoreBreakdown {
     let liveness: Int
     let nameMatch: Int
+    /// False when no expected name was supplied (nameMatchResult.hasExpectedNames == false),
+    /// so the name-match value is an extraction proxy, not a match — render it as "N/A".
+    let nameMatchEvaluated: Bool
     let documentQuality: Int
     let selfieMatch: Int
     let overallScore: Int
@@ -764,9 +773,16 @@ struct ScoreBreakdown {
             }
         }
 
+        // Name match is "evaluated" only when an expected name was supplied. When the
+        // backend reports hasExpectedNames == false the number is an OCR extraction proxy,
+        // not a match, so the result view shows "N/A". Default to true when the detail is
+        // absent (legacy backends) so existing behavior is preserved.
+        let nameMatchEvaluated = scores?.nameMatchResult?.hasExpectedNames ?? true
+
         return ScoreBreakdown(
             liveness: livenessScore,
             nameMatch: nameScore,
+            nameMatchEvaluated: nameMatchEvaluated,
             documentQuality: docScore,
             selfieMatch: faceScore,
             overallScore: overallScore,

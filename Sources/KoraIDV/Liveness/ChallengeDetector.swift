@@ -26,6 +26,15 @@ final class ChallengeDetector {
     /// Smile detection threshold
     private let smileThreshold: Float = 0.3
 
+    /// **v1.10.9 — "liveness too fast" fix.** Frames of *continuous* smiling
+    /// required before the smile latches. Apple's classifier can fire on an
+    /// incipient/partial smile on a single frame; latching on that first frame
+    /// made the challenge complete ~165 ms later and advance to "Verifying"
+    /// before the user had properly smiled. Requiring a short continuous hold
+    /// (~200 ms) before latching makes the gesture deliberate while still
+    /// latching afterward so a natural smile's fluctuation/blur doesn't reset it.
+    private let smileConfirmFrames = 6
+
     /// Head turn threshold (radians) — relaxed for front-camera jitter
     private let turnThreshold: Float = 0.17
 
@@ -60,6 +69,9 @@ final class ChallengeDetector {
     private let baselineMaxWaitFrames = 30
 
     private var smileDetected = false
+    /// **v1.10.9** — consecutive frames the user has held a smile, used to
+    /// debounce the latch above. Reset in `reset()` and on any non-smiling frame.
+    private var smileHoldFrames = 0
 
     /// **v1.9.0-rc6.8** — Core Image face detector for smile + eye-blink.
     /// Apple Vision (the framework the rest of the SDK uses) does not
@@ -171,6 +183,7 @@ final class ChallengeDetector {
         nodDetected = false
         nodBaselineWaitFrames = 0
         smileDetected = false
+        smileHoldFrames = 0
         // **v1.9.0-rc6.8** — reset CIDetector-path blink state too,
         // so the next challenge starts fresh.
         coreImageBlinkState = .waitingForClose
@@ -200,8 +213,19 @@ final class ChallengeDetector {
         guard let face = features.first as? CIFaceFeature else {
             return smileDetected  // no face this frame, return cached state
         }
+        // **v1.10.9** — debounce-before-latch: require the smile to be held for
+        // `smileConfirmFrames` continuous frames before latching, instead of
+        // latching on the first detected frame (which made the challenge auto-
+        // complete before the user had properly smiled). Once latched it stays
+        // latched for the rest of the challenge so natural fluctuation/blur does
+        // not reset progress.
         if face.hasSmile {
-            smileDetected = true
+            smileHoldFrames += 1
+            if smileHoldFrames >= smileConfirmFrames {
+                smileDetected = true
+            }
+        } else if !smileDetected {
+            smileHoldFrames = 0  // broke the hold before latching — start over
         }
         return smileDetected
     }
@@ -351,10 +375,17 @@ final class ChallengeDetector {
 
         let ratio = Float(width / height)
 
+        // **v1.10.9** — debounce-before-latch (matches the CIDetector path): a
+        // single frame crossing the ratio threshold no longer latches; the smile
+        // must be held for `smileConfirmFrames` continuous frames first.
         if ratio > (2.0 + smileThreshold) {
-            smileDetected = true
+            smileHoldFrames += 1
+            if smileHoldFrames >= smileConfirmFrames {
+                smileDetected = true
+            }
+        } else if !smileDetected {
+            smileHoldFrames = 0
         }
-        // Sticky — once true, stays true until `reset()` (next challenge).
 
         return smileDetected
     }

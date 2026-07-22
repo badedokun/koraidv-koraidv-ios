@@ -207,7 +207,7 @@ struct SuccessScreen: View {
             metrics.append(ScoreMetric(label: L10n.tr("koraidv.score.screening"), score: screening, iconName: "shield.fill", status: screening >= 70 ? .pass : .fail))
         }
         metrics.append(contentsOf: [
-            ScoreMetric(label: L10n.tr("koraidv.score.name_match"), score: scores.nameMatch, iconName: "checkmark.circle.fill", status: scores.nameMatch >= 70 ? .pass : .fail),
+            ScoreMetric(label: L10n.tr("koraidv.score.name_match"), score: scores.nameMatch, iconName: "checkmark.circle.fill", status: !scores.nameMatchEvaluated ? .pass : (scores.nameMatch >= 70 ? .pass : .fail), notApplicable: !scores.nameMatchEvaluated),
             // Doc quality + selfie pass-floor is 60 (not 70) — color must match,
             // or a passed metric shows red (BanffPay 2026-06-22). Selfie also
             // gets an amber band over the 45-60 manual-review zone.
@@ -324,8 +324,9 @@ struct RejectedScreen: View {
         metrics.append(contentsOf: [
             ScoreMetric(
                 label: L10n.tr("koraidv.score.name_match"), score: scores.nameMatch, iconName: "checkmark.circle.fill",
-                status: scores.nameMatch >= 70 ? .pass : .fail,
-                errorMessage: scores.nameMatch < 70 ? L10n.tr("koraidv.score.error.name") : nil
+                status: !scores.nameMatchEvaluated ? .pass : (scores.nameMatch >= 70 ? .pass : .fail),
+                errorMessage: (scores.nameMatchEvaluated && scores.nameMatch < 70) ? L10n.tr("koraidv.score.error.name") : nil,
+                notApplicable: !scores.nameMatchEvaluated
             ),
             ScoreMetric(
                 label: L10n.tr("koraidv.score.document_quality"), score: scores.documentQuality, iconName: "creditcard.fill",
@@ -523,7 +524,7 @@ struct ManualReviewScreen: View {
             metrics.append(ScoreMetric(label: L10n.tr("koraidv.score.screening"), score: screening, iconName: "shield.fill", status: screening >= 70 ? .pass : .borderline))
         }
         metrics.append(contentsOf: [
-            ScoreMetric(label: L10n.tr("koraidv.score.name_match"), score: scores.nameMatch, iconName: "checkmark.circle.fill", status: scores.nameMatch >= 70 ? .pass : .borderline),
+            ScoreMetric(label: L10n.tr("koraidv.score.name_match"), score: scores.nameMatch, iconName: "checkmark.circle.fill", status: !scores.nameMatchEvaluated ? .pass : (scores.nameMatch >= 70 ? .pass : .borderline), notApplicable: !scores.nameMatchEvaluated),
             ScoreMetric(label: L10n.tr("koraidv.score.document_quality"), score: scores.documentQuality, iconName: "creditcard.fill", status: scores.documentQuality >= 70 ? .pass : .borderline),
             ScoreMetric(label: L10n.tr("koraidv.score.selfie_match"), score: scores.selfieMatch, iconName: selfieStatus == .borderline ? "info.circle.fill" : "person.fill", status: selfieStatus),
         ])
