@@ -819,7 +819,14 @@ final class VerificationFlowController {
         // rc6.2: `verified` is the backend's wire string for auto-approve;
         // `approved` is the legacy alias retained for backwards compat.
         // Both map to the same terminal `result` step here.
-        case .processing, .verified, .approved, .rejected, .reviewRequired,
+        // .processing = document captured but NOT yet decided (the backend uses
+        // `processing` for the whole mid-capture phase). Resuming such a verification
+        // must let the user CONTINUE capture — routing it to .result stranded the user
+        // on "Verifying Your Identity" after cancel+restart. The existing document
+        // satisfies the selfie precondition. v1.10.11 — project_banffpay_v11010_retest_defects.
+        case .processing:
+            return .selfie
+        case .verified, .approved, .rejected, .reviewRequired,
              .failed, .manualReview, .unknown:
             return .result
         case .expired:

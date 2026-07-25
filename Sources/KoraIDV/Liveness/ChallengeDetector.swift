@@ -33,7 +33,15 @@ final class ChallengeDetector {
     /// before the user had properly smiled. Requiring a short continuous hold
     /// (~200 ms) before latching makes the gesture deliberate while still
     /// latching afterward so a natural smile's fluctuation/blur doesn't reset it.
-    private let smileConfirmFrames = 6
+    private let smileConfirmFrames = 10
+
+    /// **v1.10.11 — "liveness too fast" (BanffPay retest).** Minimum frames a challenge
+    /// must be on screen before it may complete, regardless of how quickly the gesture
+    /// is detected — so the flow cannot advance to "Verifying Your Identity" before the
+    /// user has had time to read the prompt and deliberately perform the expression.
+    /// ~24 frames ≈ 0.8 s at 30 fps. Applies to every challenge type, on top of the
+    /// per-gesture thresholds (requiredConsecutiveDetections / smileConfirmFrames).
+    private let minFramesBeforeComplete = 24
 
     /// Head turn threshold (radians) — relaxed for front-camera jitter
     private let turnThreshold: Float = 0.17
@@ -161,7 +169,12 @@ final class ChallengeDetector {
         let recentDetections = detectionHistory.suffix(requiredConsecutiveDetections)
         let consecutiveCount = recentDetections.filter { $0 }.count
         let progress = Float(consecutiveCount) / Float(requiredConsecutiveDetections)
+        // Gate completion on a minimum on-screen dwell (v1.10.11): even once the gesture
+        // is detected, do not advance until the challenge has been visible long enough
+        // for the user to deliberately perform it — fixes "advanced to Verifying before
+        // I could finish smiling". See project_banffpay_v11010_retest_defects.
         let completed = consecutiveCount >= requiredConsecutiveDetections
+            && frameCount >= minFramesBeforeComplete
 
         return ChallengeDetectionResult(
             progress: min(progress, 1.0),

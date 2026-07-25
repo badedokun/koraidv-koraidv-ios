@@ -338,8 +338,15 @@ final class APIClient {
 
         if let urlError = error as? URLError {
             switch urlError.code {
-            case .timedOut, .networkConnectionLost, .notConnectedToInternet:
-                return true // Network errors are safe to retry for all methods
+            case .notConnectedToInternet:
+                // The request never left the device — safe to retry for any method.
+                return true
+            case .timedOut, .networkConnectionLost:
+                // Ambiguous: the request may have reached the server and been processed
+                // (a multi-MB upload can time out on the RESPONSE, not the send). Retrying
+                // a non-idempotent POST here risks a duplicate upload/verification, so only
+                // retry idempotent methods — matching the POST rule above. v1.10.11.
+                return isIdempotent
             default:
                 return false
             }
