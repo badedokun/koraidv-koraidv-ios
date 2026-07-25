@@ -7,6 +7,15 @@ protocol SelfieCaptureDelegate: AnyObject {
     func selfieCapture(_ capture: SelfieCapture, didCapture imageData: Data)
     func selfieCapture(_ capture: SelfieCapture, didUpdateValidation issues: [String])
     func selfieCapture(_ capture: SelfieCapture, didFail error: KoraError)
+    /// Emits the selfie pre-capture countdown: 3, 2, 1, then nil when it fires or
+    /// resets (face left the oval). Drives the on-screen "capturing in N…" so the
+    /// user has time to pose — parity with the liveness countdown.
+    func selfieCapture(_ capture: SelfieCapture, didUpdateCountdown seconds: Int?)
+}
+
+// Default no-op so existing conformers need not implement the countdown callback.
+extension SelfieCaptureDelegate {
+    func selfieCapture(_ capture: SelfieCapture, didUpdateCountdown seconds: Int?) {}
 }
 
 /// Selfie capture manager
@@ -67,15 +76,22 @@ final class SelfieCapture: NSObject {
     /// acceptance ellipse the fast auto-capture now fires for a normally-held
     /// face, so this is only a last-resort floor; 5s keeps even edge cases from
     /// feeling stuck.
-    var selfieForceCaptureDeadline: TimeInterval = 5.0
+    var selfieForceCaptureDeadline: TimeInterval = 8.0
     private var firstFaceSeenAt: Date?
+
+    /// **Selfie pre-capture countdown (BanffPay v1.10.12).** Once the face is stable
+    /// and the camera settled, run a visible N…3…2…1 countdown before the shutter
+    /// fires, so the user has time to pose — the "selfie snapped before I could
+    /// prepare" report. Parity with the liveness countdown. Reset if the face leaves.
+    private let selfieCountdownDuration: TimeInterval = 3.0
+    private var countdownStartedAt: Date?
 
     /// **Camera settle delay (BanffPay retest #5).** Minimum time between the
     /// camera starting and ANY auto/force capture firing. Without it the selfie
     /// snapped the instant the camera opened with a face already in frame — the
     /// "takes the pic as soon as the oval appears" report — giving the user no
     /// time to position. Mirrors the document path's `cameraSettleDelay`.
-    private let selfieSettleDelay: TimeInterval = 1.2
+    private let selfieSettleDelay: TimeInterval = 1.5
     /// Set when the camera session starts (and re-armed on retake); used by the
     /// settle-delay gate in `handleFaceDetection`.
     private var cameraStartedAt: Date?
@@ -123,7 +139,7 @@ final class SelfieCapture: NSObject {
     /// Stop selfie capture
     func stop() {
         cameraManager.stop()
-        autoCaptureCounter = 0
+        autoCaptureCounter = 0; countdownStartedAt = nil
         firstFaceSeenAt = nil
     }
 
@@ -141,7 +157,7 @@ final class SelfieCapture: NSObject {
 
     /// Reset auto-capture counter
     func resetAutoCapture() {
-        autoCaptureCounter = 0
+        autoCaptureCounter = 0; countdownStartedAt = nil
     }
 
     /// Re-arm the capture engine for a retake. Releases the isCapturing
@@ -150,7 +166,7 @@ final class SelfieCapture: NSObject {
     /// fresh. Call after the user taps Retake on the review screen.
     func resetForRetake() {
         isCapturing = false
-        autoCaptureCounter = 0
+        autoCaptureCounter = 0; countdownStartedAt = nil
         firstFaceSeenAt = nil
         // Re-arm the settle delay so a retake gets the same positioning
         // headroom as the initial capture instead of firing immediately.
@@ -174,7 +190,7 @@ final class SelfieCapture: NSObject {
             } else {
                 DispatchQueue.main.async {
                     self.delegate?.selfieCapture(self, didUpdateValidation: ["No face detected"])
-                    self.autoCaptureCounter = 0
+                    self.autoCaptureCounter = 0; self.countdownStartedAt = nil
                     self.firstFaceSeenAt = nil
                 }
             }
@@ -247,9 +263,21 @@ final class SelfieCapture: NSObject {
         if issues.isEmpty && lightingOK && isAutoCaptureEnabled {
             autoCaptureCounter += 1
             if autoCaptureCounter >= autoCaptureThreshold && settled && !isCapturing {
-                capture()
+                // Face is stable + camera settled → run a visible N…3…2…1 countdown so
+                // the user can pose before the shutter fires (v1.10.12), then capture at
+                // zero. Held in the good-frame branch, so if the face leaves mid-count the
+                // else branch below cancels and it restarts fresh.
+                if countdownStartedAt == nil { countdownStartedAt = Date() }
+                let remaining = selfieCountdownDuration - Date().timeIntervalSince(countdownStartedAt ?? Date())
+                if remaining <= 0 {
+                    delegate?.selfieCapture(self, didUpdateCountdown: nil)
+                    capture()
+                } else {
+                    delegate?.selfieCapture(self, didUpdateCountdown: Int(ceil(remaining)))
+                }
             }
         } else if heldLongEnough && faceInOval && lightingOK && isAutoCaptureEnabled && !isCapturing {
+            delegate?.selfieCapture(self, didUpdateCountdown: nil)
             // Coached for the full deadline and the face IS in the oval, but a
             // non-positional issue never cleared — capture anyway so the user is
             // never stranded. Still gated on lightingOK: a persistent LIGHTING
@@ -263,6 +291,12 @@ final class SelfieCapture: NSObject {
             // mostly-good scene with occasional flicker now climbs steadily to
             // the threshold instead of thrashing back to zero.
             autoCaptureCounter = max(0, autoCaptureCounter - 2)
+            // Face/lighting no longer good → abandon the countdown so it restarts fresh
+            // once the user re-settles (never a stale "1" hanging while they reposition).
+            if countdownStartedAt != nil {
+                countdownStartedAt = nil
+                delegate?.selfieCapture(self, didUpdateCountdown: nil)
+            }
         }
     }
 

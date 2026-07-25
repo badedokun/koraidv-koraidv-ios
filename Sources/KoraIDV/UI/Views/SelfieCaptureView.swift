@@ -119,7 +119,20 @@ struct SelfieCaptureView: View {
                         .frame(width: ovalW, height: ovalH)
                         .animation(.easeInOut(duration: 0.25), value: viewModel.isReady)
                         .animation(.easeInOut(duration: 0.25), value: viewModel.isFaceDetected)
+
+                    // Pre-capture countdown over the oval (3…2…1) so the user can pose
+                    // before the shutter fires — parity with the liveness countdown.
+                    if let n = viewModel.captureCountdown {
+                        Text("\(n)")
+                            .font(.system(size: 92, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .shadow(color: .black.opacity(0.6), radius: 8)
+                            .transition(.scale.combined(with: .opacity))
+                            .id(n)
+                            .accessibilityLabel("Capturing in \(n)")
+                    }
                 }
+                .animation(.easeOut(duration: 0.2), value: viewModel.captureCountdown)
 
                 Spacer(minLength: 16)
 
@@ -303,6 +316,9 @@ class SelfieCaptureViewModel: ObservableObject {
     @Published var feedbackMessage: String?
     @Published var isProcessing = false
     @Published var captureProgress: Float = 0
+    /// Pre-capture countdown (3,2,1) shown over the oval so the user can pose before
+    /// the selfie auto-fires. nil = not counting. Parity with the liveness countdown.
+    @Published var captureCountdown: Int?
 
     /// Set when a capture is rejected for eye visibility (sunglasses / tinted /
     /// mirrored lenses). Drives the prominent rejection overlay and PAUSES
@@ -356,6 +372,10 @@ class SelfieCaptureViewModel: ObservableObject {
 extension SelfieCaptureViewModel: SelfieCaptureDelegate {
     func selfieCapture(_ capture: SelfieCapture, didDetectFace result: FaceDetectionResult) {
         isFaceDetected = !result.faces.isEmpty
+    }
+
+    func selfieCapture(_ capture: SelfieCapture, didUpdateCountdown seconds: Int?) {
+        DispatchQueue.main.async { self.captureCountdown = seconds }
     }
 
     func selfieCapture(_ capture: SelfieCapture, didCapture imageData: Data) {
