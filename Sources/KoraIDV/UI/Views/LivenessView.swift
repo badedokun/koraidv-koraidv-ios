@@ -222,6 +222,11 @@ class LivenessViewModel: ObservableObject {
     /// `livenessManager(_:didChangeFaceDetected:)` delegate callback.
     @Published var isFaceDetected: Bool = false
 
+    /// True once ALL challenges are done and we're holding on the completion ✓ before
+    /// advancing to processing — keeps the per-challenge 0.6s auto-dismiss from clearing
+    /// the checkmark during the final hold (see livenessCompleteHold).
+    private var isFinishing = false
+
     let livenessManager = LivenessManager()
     private let session: LivenessSession
     private var onChallengeComplete: ((LivenessChallenge, Data) -> Void)?
@@ -383,7 +388,8 @@ extension LivenessViewModel: LivenessManagerDelegate {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 self.showChallengeCompleteCheck = true
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
-                    self?.showChallengeCompleteCheck = false
+                    // Don't clear the ✓ if we're now holding on the final-complete beat.
+                    if self?.isFinishing != true { self?.showChallengeCompleteCheck = false }
                 }
             }
         }
@@ -422,9 +428,21 @@ extension LivenessViewModel: LivenessManagerDelegate {
         }
     }
 
+    /// Beat to hold on the "liveness complete" state (checkmark) before advancing to the
+    /// "Verifying your identity" processing screen. Previously onAllComplete fired the instant
+    /// the final challenge (usually the smile) registered, so the flow jumped to processing
+    /// before the user finished the expression — it read as cutting them off mid-smile and was
+    /// noticeably snappier than Android (BanffPay 2026-07-26). Give the completion a natural beat.
+    static let livenessCompleteHold: TimeInterval = 2.5
+
     func livenessManager(_ manager: LivenessManager, didComplete result: LivenessResult) {
         DispatchQueue.main.async {
-            self.onAllComplete?()
+            self.isFinishing = true
+            self.showChallengeCompleteCheck = true   // show the ✓ for the whole hold
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.livenessCompleteHold) { [weak self] in
+            self?.showChallengeCompleteCheck = false
+            self?.onAllComplete?()
         }
     }
 
