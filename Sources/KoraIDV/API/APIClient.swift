@@ -106,8 +106,11 @@ final class APIClient {
         self.encoder.dateEncodingStrategy = .iso8601
 
         let sessionConfig = URLSessionConfiguration.default
-        sessionConfig.timeoutIntervalForRequest = 120 // Selfie processing can take 10-30s on ML cold starts
-        sessionConfig.timeoutIntervalForResource = 120
+        // Selfie processing can take 10-30s on ML cold starts; sandbox scale-to-zero
+        // adds ~20s more. Default 120s absorbs both; overridable via config.
+        let netTimeout = configuration.networkTimeoutSeconds ?? 120
+        sessionConfig.timeoutIntervalForRequest = netTimeout
+        sessionConfig.timeoutIntervalForResource = netTimeout
 
         // Enable certificate pinning for production with default base URL.
         // Use a proxy delegate so URLSession does not strongly retain APIClient.

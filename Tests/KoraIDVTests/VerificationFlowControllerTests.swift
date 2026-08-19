@@ -30,7 +30,8 @@ final class VerificationFlowControllerTests: XCTestCase {
             updatedAt: Date(),
             scores: nil,
             completedAt: nil,
-            decisionReason: nil
+            decisionReason: nil,
+            decisionCode: nil
         )
     }
 
@@ -77,7 +78,8 @@ final class VerificationFlowControllerTests: XCTestCase {
             updatedAt: Date(),
             scores: nil,
             completedAt: Date(),
-            decisionReason: nil
+            decisionReason: nil,
+            decisionCode: nil
         )
     }
 

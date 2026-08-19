@@ -206,11 +206,41 @@ final class VerificationFlowController {
 
         showLoading(message: "Processing document...")
 
+        // On-device PDF417 decode for BACK captures (Phase 3 fast path), matching
+        // the Android SDK's on-device ML Kit decode. Vision reads the AAMVA
+        // payload from the back barcode before upload so the server can
+        // cross-validate front OCR against the back barcode (front↔back field
+        // consistency — an anti-tamper/splicing signal) instead of relying on its
+        // own image-decode cascade, which is unreliable on real phone captures.
+        // Without this the server saw `client_pre_decoded: false` on every iOS
+        // run and often reported "No barcode detected", so iOS DL verifications
+        // silently lost the cross-validation that Android always had.
+        // Runs off the main thread; `nil` for documents without a decodable
+        // PDF417 (passports, foreign DLs) → server falls back to its cascade.
+        guard side == .back else {
+            performDocumentUpload(imageData: imageData, side: side,
+                                  documentType: documentType, decodedBarcodePayload: nil)
+            return
+        }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let payload = BarcodeScanner().decodePdf417(imageData: imageData)
+            DispatchQueue.main.async {
+                self?.performDocumentUpload(imageData: imageData, side: side,
+                                            documentType: documentType,
+                                            decodedBarcodePayload: payload)
+            }
+        }
+    }
+
+    private func performDocumentUpload(imageData: Data, side: DocumentSide,
+                                       documentType: DocumentType,
+                                       decodedBarcodePayload: String?) {
         sessionManager.uploadDocument(
             verificationId: verification.id,
             imageData: imageData,
             side: side,
             documentType: documentType,
+            decodedBarcodePayload: decodedBarcodePayload,
             // Backend backfills verification.selectedCountry from this so
             // the selected-vs-detected mismatch gate at /complete can fire.
             // Only meaningful on FRONT uploads (backfill is conditional on

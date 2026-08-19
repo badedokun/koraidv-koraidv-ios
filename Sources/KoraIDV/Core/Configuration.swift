@@ -40,6 +40,12 @@ public struct Configuration {
     /// Session timeout in seconds
     public var timeout: TimeInterval
 
+    /// Per-request network timeout in seconds. `nil` keeps the SDK default of
+    /// 120s, which already absorbs sandbox scale-to-zero cold starts (parity
+    /// with Android's `networkTimeoutSeconds`; iOS defaults higher because
+    /// selfie/ML processing can take 10–30s). Set to override.
+    public var networkTimeoutSeconds: TimeInterval?
+
     /// Enable debug logging
     public var debugLogging: Bool
 
@@ -111,6 +117,7 @@ public struct Configuration {
         self.theme = KoraTheme()
         self.locale = Locale.current
         self.timeout = 600 // 10 minutes
+        self.networkTimeoutSeconds = nil
         self.debugLogging = false
         self.resultPageMode = .detailed
         self.customMessages = nil
