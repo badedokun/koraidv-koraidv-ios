@@ -26,6 +26,7 @@
 /* DocumentCaptureView */
 "koraidv.capture.front" = "Front of ID";
 "koraidv.capture.back" = "Back of ID";
+"koraidv.capture.lighting" = "Find good, even light and avoid glare on the card.";
 "koraidv.capture.step.front" = "Front";
 "koraidv.capture.step.back" = "Back";
 "koraidv.capture.hold_steady" = "Hold steady...";
@@ -49,6 +50,7 @@
 "koraidv.selfie.title" = "Selfie";
 "koraidv.selfie.face_camera" = "Face the camera";
 "koraidv.selfie.neutral" = "Keep a neutral expression";
+"koraidv.selfie.lighting" = "Find good, even light — face a window or lamp.";
 "koraidv.selfie.remove_glasses" = "Remove eyeglasses for the best match";
 "koraidv.selfie.remove_sunglasses" = "Remove sunglasses — your eyes must be clearly visible";
 "koraidv.selfie.eyes_blocked_title" = "We can't see your eyes";

@@ -26,6 +26,7 @@
 /* DocumentCaptureView */
 "koraidv.capture.front" = "Recto de la pièce d'identité";
 "koraidv.capture.back" = "Verso de la pièce d'identité";
+"koraidv.capture.lighting" = "Trouvez un éclairage uniforme et évitez les reflets sur la carte.";
 "koraidv.capture.step.front" = "Recto";
 "koraidv.capture.step.back" = "Verso";
 "koraidv.capture.hold_steady" = "Ne bougez pas...";
@@ -43,6 +44,7 @@
 "koraidv.selfie.title" = "Selfie";
 "koraidv.selfie.face_camera" = "Faites face à la caméra";
 "koraidv.selfie.neutral" = "Gardez une expression neutre";
+"koraidv.selfie.lighting" = "Placez-vous face à une fenêtre ou une lampe pour un bon éclairage.";
 "koraidv.selfie.remove_glasses" = "Retirez vos lunettes pour une meilleure correspondance";
 "koraidv.selfie.remove_sunglasses" = "Retirez vos lunettes de soleil — vos yeux doivent être clairement visibles";
 "koraidv.selfie.eyes_blocked_title" = "Nous ne voyons pas vos yeux";

@@ -62,6 +62,12 @@ struct DocumentCaptureView: View {
                     onClose: onCancel
                 )
 
+                // Lighting tip — cuts retries from low light / glare (parity with web/Android SDKs).
+                Text(L10n.tr("koraidv.capture.lighting"))
+                    .font(.system(size: 15))
+                    .foregroundColor(.white.opacity(0.5))
+                    .padding(.top, 4)
+
                 Spacer()
 
                 // Document viewfinder

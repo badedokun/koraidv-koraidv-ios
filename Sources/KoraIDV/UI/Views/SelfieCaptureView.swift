@@ -74,6 +74,12 @@ struct SelfieCaptureView: View {
                     .foregroundColor(.white.opacity(0.5))
                     .padding(.top, 4)
 
+                // Lighting tip — cuts retries from low light (parity with web/Android SDKs).
+                Text(L10n.tr("koraidv.selfie.lighting"))
+                    .font(.system(size: 15))
+                    .foregroundColor(.white.opacity(0.5))
+                    .padding(.top, 2)
+
                 // Eyeglasses coaching (Phase 1 of the eyeglasses policy). The
                 // issued ID portrait is glasses-free by government standard, so a
                 // glasses-free selfie maximizes match reliability. Soft prompt,
